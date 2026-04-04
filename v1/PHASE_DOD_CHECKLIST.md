@@ -29,25 +29,25 @@ Manual test notes for reviewer:
 
 ## Phase 2 — Canonical model + store
 
-- [ ] Core types implemented from spec v1.1
-- [ ] State store supports CRUD for model entities
-- [ ] Local persistence works (reload restores state)
-- [ ] Schema version (`1.1`) included in saved artifact
+- [x] Core types implemented from spec v1.1
+- [x] State store supports CRUD for model entities
+- [x] Local persistence works (reload restores state)
+- [x] Schema version (`1.1`) included in saved artifact
 
 ## Phase 3 — Workspace/project/artifact basics
 
-- [ ] Can create/select/delete project
-- [ ] Can create/select artifact and new version
-- [ ] Folder grouping works (basic)
-- [ ] Version list shows current + history entries
+- [x] Can create/select/delete project
+- [x] Can create/select artifact and new version
+- [x] Folder grouping works (basic)
+- [x] Version list shows current + history entries
 
 ## Phase 4 — Journey Flow editor
 
-- [ ] Add/move/delete/connect nodes
-- [ ] Edge types supported (seq/cond/parallel/fallback)
-- [ ] Inspector edits node/edge fields
-- [ ] Undo works for key actions
-- [ ] No blocking UI lag at target map size
+- [x] Add/move/delete/connect nodes
+- [x] Edge types supported (seq/cond/parallel/fallback)
+- [x] Inspector edits node/edge fields
+- [x] Undo works for key actions
+- [x] No blocking UI lag at target map size
 
 ## Phase 5 — Journey Map projection
 
