@@ -596,6 +596,28 @@
   background: var(--canvas-bg);
 }
 
+.flow-empty-hint {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 360px;
+  border: 1px solid #c7d7f8;
+  background: #edf3ff;
+  color: #234fbb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.flow-empty-hint strong {
+  font-size: 11.5px;
+}
+
 .canvas-wrap .react-flow__renderer {
   background-image: linear-gradient(var(--border) 1px, transparent 1px),
     linear-gradient(90deg, var(--border) 1px, transparent 1px);

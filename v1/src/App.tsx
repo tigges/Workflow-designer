@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, type MouseEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type MouseEvent,
+} from 'react'
 import {
   Background,
   Controls,
@@ -9,6 +16,7 @@ import {
   ReactFlow,
   useEdgesState,
   useNodesState,
+  type ReactFlowInstance,
   type Connection,
   type Edge,
   type Node,
@@ -67,6 +75,7 @@ const ACTOR_OPTIONS: Array<{ value: Actor; label: string }> = [
 ]
 
 const MAP_PHASE_NAMES = ['Discover', 'Consider', 'Onboard', 'Use', 'Resolve', 'Retain']
+const PALETTE_NODE_MIME = 'application/flowcraft-node-type'
 
 const FEATURE_AVAILABILITY = {
   templates: false,
@@ -198,6 +207,10 @@ export default function App() {
   const [activeEdgeType, setActiveEdgeType] = useState<EdgeType>('sequential')
   const [aiPrompt, setAiPrompt] = useState('')
   const [headerNotice, setHeaderNotice] = useState('')
+  const [rfInstance, setRfInstance] = useState<ReactFlowInstance<Node<RFNodeData>, Edge> | null>(
+    null,
+  )
+  const canvasWrapRef = useRef<HTMLDivElement | null>(null)
 
   const selectedProject = useMemo(
     () => projects.find((p) => p.id === selectedProjectId) ?? null,
@@ -335,10 +348,52 @@ export default function App() {
     createVersion(selectedArtifactId, name)
   }
 
+  function nodeLabel(type: FlowNode['type']) {
+    return NODE_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? 'Node'
+  }
+
   function handleAddNode(type: FlowNode['type']) {
     if (!currentModel) return
     const node = buildDefaultNode(currentModel.nodes.length, type)
+    if (rfInstance && canvasWrapRef.current) {
+      const rect = canvasWrapRef.current.getBoundingClientRect()
+      node.position = rfInstance.screenToFlowPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      })
+    }
     addNodeToCurrentVersion(node)
+    if (selectedTab !== 'flow') setTab('flow')
+    setHeaderNotice(`${nodeLabel(type)} node added. Drag it or connect from handles.`)
+  }
+
+  function handlePaletteDragStart(event: DragEvent<HTMLButtonElement>, type: FlowNode['type']) {
+    if (!selectedVersion) {
+      event.preventDefault()
+      return
+    }
+    event.dataTransfer.setData(PALETTE_NODE_MIME, type)
+    event.dataTransfer.effectAllowed = 'copy'
+  }
+
+  function handleCanvasDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!selectedVersion || selectedTab !== 'flow') return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }
+
+  function handleCanvasDrop(event: DragEvent<HTMLDivElement>) {
+    if (!selectedVersion || selectedTab !== 'flow' || !rfInstance || !currentModel) return
+    event.preventDefault()
+    const rawType = event.dataTransfer.getData(PALETTE_NODE_MIME)
+    if (!rawType) return
+    const nodeType = NODE_TYPE_OPTIONS.some((option) => option.value === rawType)
+      ? (rawType as FlowNode['type'])
+      : 'process'
+    const node = buildDefaultNode(currentModel.nodes.length, nodeType)
+    node.position = rfInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY })
+    addNodeToCurrentVersion(node)
+    setHeaderNotice(`${nodeLabel(nodeType)} node dropped on canvas.`)
   }
 
   function handleConnect(conn: Connection) {
@@ -640,8 +695,10 @@ export default function App() {
                 key={opt.value}
                 type="button"
                 className="pal-card"
+                draggable={Boolean(selectedVersion)}
+                onDragStart={(event) => handlePaletteDragStart(event, opt.value)}
                 onClick={() => handleAddNode(opt.value)}
-                disabled={!selectedVersion || selectedTab !== 'flow'}
+                disabled={!selectedVersion}
               >
                 <span className={`pal-shape shape-${opt.value}`} />
                 <span className="pal-info">
@@ -705,14 +762,19 @@ export default function App() {
               type="button"
               className="btn tiny"
               onClick={() => handleAddNode('process')}
-              disabled={!selectedVersion || selectedTab !== 'flow'}
+              disabled={!selectedVersion}
             >
               + Process Node
             </button>
-            <span className="flow-hint">Tip: drag from node handle to connect</span>
+            <span className="flow-hint">Tip: click/drag node types to add, then drag from handles to connect</span>
           </div>
 
-          <div className="canvas-wrap">
+          <div
+            className="canvas-wrap"
+            ref={canvasWrapRef}
+            onDragOver={handleCanvasDragOver}
+            onDrop={handleCanvasDrop}
+          >
             {selectedTab === 'flow' ? (
               selectedVersion ? (
                 <ReactFlow
@@ -728,6 +790,7 @@ export default function App() {
                     selectNode(null)
                     selectEdge(null)
                   }}
+                  onInit={setRfInstance}
                   nodeTypes={nodeTypes}
                   nodesDraggable
                   nodesConnectable
@@ -910,6 +973,15 @@ export default function App() {
         <span>{currentModel?.edges.length ?? 0} connections</span>
         <span className="sb-sep">|</span>
         <span>{selectedTab}</span>
+        <span className="sb-sep">|</span>
+        <span className="legend-item">
+          <span className="legend-dot live" />
+          Live
+        </span>
+        <span className="legend-item">
+          <span className="legend-dot preview" />
+          Preview
+        </span>
         <span className="sb-hint">{headerNotice || 'Drag nodes to canvas - connect with handles - edit in right panel'}</span>
       </footer>
     </div>
