@@ -1052,11 +1052,7 @@ export default function App() {
                   </button>
                 ))}
               </div>
-            ) : (
-              <div className="ct-collapsed-note">
-                Auto mode is on. Connection type, line style, and arrow style are inferred from node context.
-              </div>
-            )}
+            ) : null}
           </section>
 
           <section className="sb-sec collapsible">
