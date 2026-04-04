@@ -392,6 +392,7 @@ Request/response payloads use schema version `1.1`.
 - Workspace/project/artifact/version model
 - Manual editing (flow-first)
 - Journey Flow + Journey Map tabs from one model
+- Actor metadata on nodes and optional actor-based filtering
 - Text import + AI assist import
 - Validation + review lifecycle
 - JSON/Mermaid/SVG/PNG export
@@ -403,6 +404,14 @@ Request/response payloads use schema version `1.1`.
 - Real-time multi-user collaboration
 - Deep process mining analytics
 - Broad multilingual domain packs
+- Automatic swimlane generation and lane-aware auto-layout
+
+### 13.3 Swimlane Scope Clarification
+
+- **v1**: No mandatory swimlane rendering in process view.  
+  Node `actor` is required in schema for future lane logic, filtering, and reporting.
+- **v1.1 optional (if capacity allows)**: Manual actor lane grouping toggle in flow projection.
+- **post-v1**: Automatic swimlane generation and lane-aware validation/layout.
 
 ---
 
@@ -455,4 +464,39 @@ Track:
 - Automatic swimlane generation by actor/system
 - Domain-specific adapters (support, sales, onboarding, claims)
 - Multilingual and locale-aware extraction packs
+
+---
+
+## 17) Chapter-by-Chapter Implementation Plan (Effort + Token Forecast)
+
+This plan uses **implementation cycles** and **relative effort** (S/M/L) rather than calendar dates.
+One cycle means code + test + commit/push.
+
+| Chapter | Scope | Effort | Typical Cycles | Token Estimate |
+|---|---|---:|---:|---:|
+| 1 | Spec finalization + schema lock + glossary | S | 1 | 2k-5k |
+| 2 | Workspace model (workspace/project/folder/artifact/version APIs) | M | 2-3 | 10k-18k |
+| 3 | Editor core (flow view create/edit/connect/delete/select/history) | L | 4-6 | 24k-40k |
+| 4 | Journey Map projection (phases/touchpoints view + shared field sync) | M | 2-4 | 12k-22k |
+| 5 | Import modes (manual/text/AI assist entry flows + orchestration hooks) | M | 2-4 | 12k-24k |
+| 6 | Synthesis + validation + confidence routing | L | 3-5 | 18k-32k |
+| 7 | Review lifecycle (draft/in_review/approved/rejected + reviewer UX) | M | 2-4 | 12k-20k |
+| 8 | Export layer (JSON/Mermaid/SVG/PNG + artifact records) | M | 2-4 | 10k-18k |
+| 9 | Security/key handling policy implementation + redaction | M | 2-3 | 8k-14k |
+| 10 | Observability + QA matrix automation + release gates | M | 2-4 | 10k-18k |
+| 11 | Hardening pass (bugfixes, perf tuning, edge-case migrations) | M/L | 3-5 | 15k-30k |
+
+### Total Token Forecast
+
+- **Lean execution (strict scope control):** ~95k-130k  
+- **Typical execution:** ~130k-210k  
+- **Expanded scope / frequent UX changes:** ~210k-300k+
+
+### Token Optimization Rules
+
+1. Freeze canonical schema early and avoid midstream field churn.
+2. Keep map/flow as one model with projection-only differences.
+3. Deliver manual + text import before document ingestion complexity.
+4. Gate extras (auto-swimlanes, advanced analytics) until post-v1.
+5. Use chapter acceptance criteria before moving to next chapter.
 
