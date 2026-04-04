@@ -15,6 +15,15 @@ For quick UX-only walkthrough (static HTML, no backend), open:
 - `./draft/journey-map.html`
 - `./draft/review.html`
 
+## React v1 Build (phase-based)
+
+The React+TypeScript+Vite implementation lives in:
+
+- `./v1`
+- DoD tracker: `./v1/PHASE_DOD_CHECKLIST.md`
+
+Phase 1 (shell scaffold) is implemented and ready for manual testing.
+
 This implementation is inspired by your FlowCraft concept and includes:
 
 - Drag-and-drop node palette (process, decision, terminal, data/system, annotation)
