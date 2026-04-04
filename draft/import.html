@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FlowCraft Draft - Import</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">FlowCraft Draft</div>
+      <div class="sub">Import + Synthesis UX mock</div>
+    </header>
+
+    <div class="wrap">
+      <section class="panel">
+        <div class="panel-title">Create Project</div>
+        <div class="panel-sub">Step 1 of 3</div>
+
+        <div class="field">
+          <label for="project">Project Name</label>
+          <input id="project" value="Customer Support Complaints" />
+        </div>
+
+        <div class="field">
+          <label>Documents</label>
+          <div class="drop">
+            <div>support-playbook.pdf</div>
+            <div>escalation-rules.docx</div>
+            <div>slas-and-exceptions.txt</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Import Summary</label>
+          <div class="cards">
+            <div class="card">
+              <div class="k">Pages parsed</div>
+              <div class="v">52</div>
+            </div>
+            <div class="card">
+              <div class="k">Sections found</div>
+              <div class="v">37</div>
+            </div>
+            <div class="card">
+              <div class="k">Warnings</div>
+              <div class="v">1</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="warning">Warning: 1 scanned page had low OCR confidence.</div>
+
+        <div class="actions">
+          <button class="btn">Back</button>
+          <button class="btn btn-primary">Run Synthesis</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">Next Screen Preview</div>
+        <div class="panel-sub">Click below to continue in this mock</div>
+        <p class="muted">
+          This draft simulates the UX flow only. Buttons are static except for navigation links.
+        </p>
+        <a class="btn btn-primary" href="./journey-map.html">Go to Journey Map Screen</a>
+      </section>
+    </div>
+  </body>
+</html>
