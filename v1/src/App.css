@@ -356,6 +356,70 @@
   position: relative;
 }
 
+.preview-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px dashed #c7cedb;
+  background: #f4f6fa;
+  color: #7a869a;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sample-template-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+}
+
+.sti-pill {
+  border: 1px solid #d7e2fb;
+  border-radius: 999px;
+  background: #f2f6ff;
+  color: #2d6ef5;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+
+.sti-pill:hover:not(:disabled) {
+  border-color: #b9ccfb;
+  background: #e9f0ff;
+}
+
+.sti-pill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.import-map-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px dashed #c7cedb;
+  background: #f4f6fa;
+  color: #7a869a;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 .workspace {
   flex: 1;
   display: grid;

@@ -52,6 +52,44 @@ type RFNodeData = {
 }
 
 const TEMPLATE_TABS = ['Support', 'Onboarding', 'Sales', 'Blank'] as const
+const QUICK_IMPORT_TEMPLATES = [
+  {
+    id: 'support',
+    label: 'Support Ticket',
+    lines: [
+      'Start: Customer submits ticket',
+      'Triage request',
+      'Decision: Is issue category identified?',
+      'Resolve with knowledge base',
+      'Escalate to specialist',
+      'End: Ticket closed',
+    ],
+  },
+  {
+    id: 'onboarding',
+    label: 'Customer Onboarding',
+    lines: [
+      'Start: Customer signs agreement',
+      'Collect setup requirements',
+      'Provision account',
+      'Decision: Is setup validated?',
+      'Run enablement session',
+      'End: Customer live',
+    ],
+  },
+  {
+    id: 'sales',
+    label: 'Sales Opportunity',
+    lines: [
+      'Start: Lead created',
+      'Qualify opportunity',
+      'Decision: Is prospect qualified?',
+      'Run discovery call',
+      'Prepare proposal',
+      'End: Opportunity closed',
+    ],
+  },
+] as const
 
 const AI_PLACEHOLDER =
   'Type draft text (notes or extract). Use → to generate, or top-right Import draft to apply adapters.'
@@ -88,7 +126,7 @@ const MAP_PHASE_NAMES = ['Discover', 'Consider', 'Onboard', 'Use', 'Resolve', 'R
 const PALETTE_NODE_MIME = 'application/flowcraft-node-type'
 
 const FEATURE_AVAILABILITY = {
-  templates: false,
+  templates: true,
   aiAssist: true,
   importJson: true,
 } as const
@@ -164,6 +202,10 @@ function inferEdgeType(
   if (targetNode.type === 'annotation') return 'fallback'
   if (sourceNode.type === 'data' || targetNode.type === 'data') return 'parallel'
   return 'sequential'
+}
+
+function isFlowCanvasTab(tab: 'flow' | 'import_map' | 'map') {
+  return tab === 'flow' || tab === 'import_map'
 }
 
 function FlowNodeView({ data }: NodeProps<Node<RFNodeData>>) {
@@ -545,7 +587,7 @@ export default function App() {
       })
     }
     addNodeToCurrentVersion(node)
-    if (selectedTab !== 'flow') setTab('flow')
+    if (!isFlowCanvasTab(selectedTab)) setTab('flow')
     setHeaderNotice(`${nodeLabel(type)} node added. Drag it or connect from handles.`)
   }
 
@@ -559,13 +601,13 @@ export default function App() {
   }
 
   function handleCanvasDragOver(event: DragEvent<HTMLDivElement>) {
-    if (!selectedVersion || selectedTab !== 'flow') return
+    if (!selectedVersion || !isFlowCanvasTab(selectedTab)) return
     event.preventDefault()
     event.dataTransfer.dropEffect = 'copy'
   }
 
   function handleCanvasDrop(event: DragEvent<HTMLDivElement>) {
-    if (!selectedVersion || selectedTab !== 'flow' || !rfInstance || !currentModel) return
+    if (!selectedVersion || !isFlowCanvasTab(selectedTab) || !rfInstance || !currentModel) return
     event.preventDefault()
     const rawType = event.dataTransfer.getData(PALETTE_NODE_MIME)
     if (!rawType) return
@@ -789,6 +831,32 @@ export default function App() {
     if (result.ok) setAiPrompt('')
   }
 
+  function applyQuickImportTemplate(lines: readonly string[], label: string) {
+    const payload = lines.join('\n')
+    const result = importFromText(payload)
+    setHeaderNotice(result.ok ? `${label} template loaded. ${result.message}` : result.message)
+    if (result.ok) setTab('import_map')
+  }
+
+  function handleTemplateTabSelect(tab: (typeof TEMPLATE_TABS)[number]) {
+    setActiveTemplate(tab)
+    if (!selectedVersion) {
+      setHeaderNotice('Select or create a version before loading templates.')
+      return
+    }
+    if (tab === 'Blank') {
+      setTab('import_map')
+      setHeaderNotice('Blank template selected. Start shaping your import map manually.')
+      return
+    }
+    const preset = QUICK_IMPORT_TEMPLATES.find((candidate) => candidate.id === tab.toLowerCase())
+    if (!preset) {
+      setHeaderNotice(`No preset found for ${tab}.`)
+      return
+    }
+    applyQuickImportTemplate(preset.lines, preset.label)
+  }
+
   function handleImportDraftBySelectedSource() {
     if (draftSourceType === 'document') {
       handleImportDocumentFromDraft()
@@ -853,6 +921,11 @@ export default function App() {
     updateCurrentVersionLayoutFromRF(rfNodes.map((node) => ({ id: node.id, position: node.position })))
   }
 
+  function selectedTabLabel() {
+    if (selectedTab === 'import_map') return 'import map'
+    return selectedTab
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -879,14 +952,13 @@ export default function App() {
                     handlePreviewClick(event, 'Template presets')
                     return
                   }
-                  setActiveTemplate(tab)
+                  handleTemplateTabSelect(tab)
                 }}
               >
                 {tab}
               </button>
             ))}
           </nav>
-          {!FEATURE_AVAILABILITY.templates && <span className="preview-pill">Preview</span>}
         </div>
         <div className="header-right">
           <div className="menu-wrap">
@@ -1207,6 +1279,19 @@ export default function App() {
 
         <section className="canvas-panel">
           <div className="canvas-top">
+            <div className="sample-template-strip" role="group" aria-label="Quick import templates">
+              {QUICK_IMPORT_TEMPLATES.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  className="sti-pill"
+                  onClick={() => applyQuickImportTemplate(template.lines, template.label)}
+                  disabled={!selectedVersion}
+                >
+                  {template.label}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               className={`tab-btn ${selectedTab === 'flow' ? 'active' : ''}`}
@@ -1223,13 +1308,21 @@ export default function App() {
             </button>
             <button
               type="button"
+              className={`tab-btn ${selectedTab === 'import_map' ? 'active' : ''}`}
+              onClick={() => setTab('import_map')}
+            >
+              Import Map
+              <span className="import-map-badge">for imports</span>
+            </button>
+            <button
+              type="button"
               className="btn tiny"
               onClick={() => handleAddNode('process')}
               disabled={!selectedVersion}
             >
               + Process Node
             </button>
-            <div className="sidebar-toggle-wrap" role="group" aria-label="Sidebar visibility">
+            <div className="sidebar-toggle-wrap canvas-toggle-wrap" role="group" aria-label="Sidebar visibility">
               <button
                 type="button"
                 className={`dock-btn ${sidebarVisible ? 'active' : ''}`}
@@ -1260,7 +1353,7 @@ export default function App() {
             onDragOver={handleCanvasDragOver}
             onDrop={handleCanvasDrop}
           >
-            {selectedTab === 'flow' && (
+            {(selectedTab === 'flow' || selectedTab === 'import_map') && (
               <div className="flow-empty-hint">
                 <strong>How to build</strong>
                 <span>1) Add nodes from Build panel (click or drag/drop).</span>
@@ -1268,7 +1361,7 @@ export default function App() {
                 <span>3) Select any node/edge to edit in Inspector.</span>
               </div>
             )}
-            {selectedTab === 'flow' ? (
+            {selectedTab === 'flow' || selectedTab === 'import_map' ? (
               selectedVersion ? (
                 <ReactFlow
                   nodes={rfNodes}
@@ -1362,7 +1455,7 @@ export default function App() {
                 <p>Select or create an artifact/version to view the Journey Map.</p>
               </div>
             )}
-            {selectedTab === 'flow' && selectedVersion && (
+            {(selectedTab === 'flow' || selectedTab === 'import_map') && selectedVersion && (
               <div className="canvas-context-toolbar" role="toolbar" aria-label="Canvas context actions">
                 <button
                   type="button"
@@ -1571,7 +1664,7 @@ export default function App() {
         <span className="sb-sep">|</span>
         <span>{currentModel?.edges.length ?? 0} connections</span>
         <span className="sb-sep">|</span>
-        <span>{selectedTab}</span>
+        <span>{selectedTabLabel()}</span>
         <span className="sb-sep">|</span>
         <span className="legend-item">
           <span className="legend-dot live" />

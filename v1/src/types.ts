@@ -1,7 +1,7 @@
 export type SchemaVersion = '1.1'
 
 export type ReviewState = 'draft' | 'in_review' | 'approved' | 'rejected'
-export type ViewTab = 'flow' | 'map'
+export type ViewTab = 'flow' | 'import_map' | 'map'
 export type ImportMode = 'manual' | 'text' | 'doc' | 'ai'
 
 export type Actor = '' | 'customer' | 'agent' | 'system' | 'manager' | 'external'
