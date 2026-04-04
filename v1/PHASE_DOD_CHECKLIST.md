@@ -59,18 +59,18 @@ Manual test notes for reviewer:
 
 ## Phase 6 — Import modes (incl. doc import adapter)
 
-- [ ] Manual mode usable end-to-end
-- [ ] Text import produces candidate model
-- [ ] Existing intelligent doc import integrated via adapter
-- [ ] AI adapter output normalized to canonical model
-- [ ] Import failures show user-safe errors
+- [x] Manual mode usable end-to-end
+- [x] Text import produces candidate model
+- [x] Existing intelligent doc import integrated via adapter
+- [x] AI adapter output normalized to canonical model
+- [x] Import failures show user-safe errors
 
 ## Phase 7 — Validation + review lifecycle
 
-- [ ] Validation rules execute and surface issues
-- [ ] Review states transition: draft -> in_review -> approved/rejected
-- [ ] Review actions are auditable
-- [ ] Low-confidence candidates cannot bypass review policy
+- [x] Validation rules execute and surface issues
+- [x] Review states transition: draft -> in_review -> approved/rejected
+- [x] Review actions are auditable
+- [x] Low-confidence candidates cannot bypass review policy
 
 ## Phase 8 — Export contracts
 

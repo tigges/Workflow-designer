@@ -2,13 +2,20 @@ import { create } from 'zustand'
 import { seedState } from './data/defaultData'
 import type {
   AppState,
+  Actor,
   CanonicalModel,
+  ConfidenceSummary,
+  EdgeModel,
   EdgeType,
   FlowEdge,
   FlowNode,
+  FlowNodeType,
+  Origin,
   PMStore,
   ReviewState,
+  ValidationResult,
   ViewTab,
+  XY,
 } from './types'
 
 const STORAGE_KEY = 'processmap-v1-store'
@@ -28,7 +35,16 @@ function hydrate(): AppState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    return JSON.parse(raw) as AppState
+    const parsed = JSON.parse(raw) as AppState
+    parsed.artifacts.forEach((artifact) => {
+      artifact.versions = artifact.versions.map((version) => ({
+        ...version,
+        reviewAudit: Array.isArray((version as { reviewAudit?: unknown }).reviewAudit)
+          ? (version as { reviewAudit: typeof version.reviewAudit }).reviewAudit
+          : [],
+      }))
+    })
+    return parsed
   } catch {
     return null
   }
@@ -92,6 +108,328 @@ function validate(model: CanonicalModel) {
   )
 }
 
+function defaultConfidence(): ConfidenceSummary {
+  return { overall: 1, extraction: 1, synthesis: 1, validationPenalty: 0 }
+}
+
+function emptyModel(title: string): CanonicalModel {
+  return {
+    id: mkId('model'),
+    title,
+    sourceDocs: [],
+    nodes: [],
+    edges: [],
+    confidence: defaultConfidence(),
+    validation: [],
+    projections: {
+      flow: { nodePositions: {} },
+      map: { nodePositions: {} },
+    },
+  }
+}
+
+function actorFromText(text: string): Actor {
+  const lower = text.toLowerCase()
+  if (lower.includes('customer') || lower.includes('user') || lower.includes('client')) return 'customer'
+  if (lower.includes('agent') || lower.includes('support') || lower.includes('advisor')) return 'agent'
+  if (lower.includes('system') || lower.includes('service') || lower.includes('backend')) return 'system'
+  if (lower.includes('manager') || lower.includes('supervisor') || lower.includes('lead')) return 'manager'
+  if (lower.includes('partner') || lower.includes('vendor') || lower.includes('external')) return 'external'
+  return ''
+}
+
+function inferNodeTypeFromText(text: string): FlowNodeType {
+  const lower = text.toLowerCase()
+  if (
+    lower.startsWith('start') ||
+    lower.startsWith('begin') ||
+    lower.startsWith('end') ||
+    lower.startsWith('close')
+  ) {
+    return 'terminal'
+  }
+  if (lower.includes('?') || lower.startsWith('if ') || lower.includes('decision')) return 'decision'
+  if (
+    lower.includes('system') ||
+    lower.includes('database') ||
+    lower.includes('crm') ||
+    lower.includes('api') ||
+    lower.includes('service')
+  ) {
+    return 'data'
+  }
+  if (lower.startsWith('note:') || lower.startsWith('annotation:')) return 'annotation'
+  return 'process'
+}
+
+function mapStage(index: number, total: number): string {
+  const phases = ['Discover', 'Consider', 'Onboard', 'Use', 'Resolve', 'Retain']
+  if (total <= 1) return phases[0]
+  const ratio = index / Math.max(1, total - 1)
+  return phases[Math.min(phases.length - 1, Math.floor(ratio * phases.length))]
+}
+
+function detectParallelLabel(text: string): boolean {
+  const lower = text.toLowerCase()
+  return lower.includes('parallel') || lower.includes('in parallel') || lower.includes('simultaneous')
+}
+
+function inferEdgeTypeForImported(source: FlowNode, target: FlowNode): EdgeType {
+  if (source.type === 'decision') return 'conditional'
+  if (target.type === 'annotation') return 'fallback'
+  if (source.type === 'data' || target.type === 'data') return 'parallel'
+  return 'sequential'
+}
+
+function normalizeEdgeType(value: string): EdgeType {
+  if (value === 'sequential' || value === 'conditional' || value === 'parallel' || value === 'fallback') {
+    return value
+  }
+  return 'sequential'
+}
+
+function normalizeReviewState(state: string): ReviewState {
+  if (state === 'draft' || state === 'in_review' || state === 'approved' || state === 'rejected') return state
+  return 'draft'
+}
+
+function normalizeConfidence(value: unknown, fallback: number): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) return fallback
+  return Math.max(0, Math.min(1, Number(value.toFixed(2))))
+}
+
+function importModelFromText(text: string): CanonicalModel {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  const model = emptyModel('Text Imported Flow')
+  model.confidence = { overall: 0.72, extraction: 0.74, synthesis: 0.75, validationPenalty: 0 }
+
+  if (lines.length === 0) {
+    validate(model)
+    return model
+  }
+
+  const processLines = lines.filter((line) => !line.startsWith('#'))
+  const nodes: FlowNode[] = []
+
+  processLines.forEach((line, index) => {
+    const type = inferNodeTypeFromText(line)
+    const id = mkId('n')
+    const node: FlowNode = {
+      id,
+      type,
+      label: line.replace(/^[-*]\s*/, ''),
+      actor: actorFromText(line),
+      status: 'live',
+      metadata: {
+        stage: mapStage(index, processLines.length),
+        touchpoint: `Step ${index + 1}`,
+      },
+      origin: 'text_import',
+      confidence: normalizeConfidence(0.7 - index * 0.01, 0.65),
+      position: {
+        x: 140 + (index % 4) * 200,
+        y: 120 + Math.floor(index / 4) * 140,
+      },
+    }
+    nodes.push(node)
+  })
+
+  if (nodes.length > 0 && nodes[0].type !== 'terminal') {
+    nodes[0] = { ...nodes[0], type: 'terminal', label: `Start: ${nodes[0].label}` }
+  }
+  if (nodes.length > 1 && nodes[nodes.length - 1].type !== 'terminal') {
+    const last = nodes[nodes.length - 1]
+    nodes[nodes.length - 1] = { ...last, type: 'terminal', label: `End: ${last.label}` }
+  }
+
+  const edges: EdgeModel[] = []
+  for (let index = 0; index < nodes.length - 1; index += 1) {
+    const fromNode = nodes[index]
+    const toNode = nodes[index + 1]
+    edges.push({
+      id: mkId('e'),
+      from: fromNode.id,
+      to: toNode.id,
+      type: detectParallelLabel(fromNode.label) ? 'parallel' : inferEdgeTypeForImported(fromNode, toNode),
+      label: fromNode.type === 'decision' ? 'Yes/No' : '',
+      origin: 'text_import',
+      confidence: 0.7,
+    })
+  }
+
+  model.nodes = nodes
+  model.edges = edges
+  nodes.forEach((node) => {
+    model.projections.flow.nodePositions[node.id] = node.position
+    model.projections.map.nodePositions[node.id] = {
+      x: node.position.x * 0.9,
+      y: node.position.y * 0.7,
+    }
+  })
+  validate(model)
+  return model
+}
+
+function importModelFromDoc(text: string): CanonicalModel {
+  const base = importModelFromText(text)
+  base.title = 'Document Imported Flow'
+  base.nodes = base.nodes.map((node) => ({
+    ...node,
+    origin: 'doc_import',
+    evidence: [{ docId: 'doc-local', chunkId: `chunk-${node.id}`, quote: node.label.slice(0, 100) }],
+    confidence: normalizeConfidence((node.confidence ?? 0.7) - 0.05, 0.62),
+  }))
+  base.edges = base.edges.map((edge) => ({
+    ...edge,
+    origin: 'doc_import',
+    confidence: normalizeConfidence((edge.confidence ?? 0.7) - 0.05, 0.62),
+  }))
+  base.sourceDocs = [{ docId: 'doc-local', name: 'Local uploaded document', type: 'txt' }]
+  base.confidence = { overall: 0.64, extraction: 0.66, synthesis: 0.67, validationPenalty: 0 }
+  validate(base)
+  return base
+}
+
+function importModelFromAiPrompt(prompt: string): CanonicalModel {
+  const normalized = prompt.trim()
+  const lines =
+    normalized.length > 0
+      ? [
+          `Start ${normalized}`,
+          `Capture ${normalized} request details`,
+          `Decision: Is ${normalized} complete?`,
+          `Resolve ${normalized}`,
+          `Close ${normalized}`,
+        ]
+      : ['Start workflow', 'Triage request', 'Decision: Is information complete?', 'Resolve case', 'Close case']
+  const model = importModelFromText(lines.join('\n'))
+  model.title = 'AI Assisted Candidate'
+  model.nodes = model.nodes.map((node) => ({
+    ...node,
+    origin: 'ai_assist',
+    confidence: normalizeConfidence((node.confidence ?? 0.7) - 0.08, 0.58),
+  }))
+  model.edges = model.edges.map((edge) => ({
+    ...edge,
+    origin: 'ai_assist',
+    confidence: normalizeConfidence((edge.confidence ?? 0.7) - 0.08, 0.58),
+  }))
+  model.confidence = { overall: 0.59, extraction: 0.61, synthesis: 0.62, validationPenalty: 0 }
+  validate(model)
+  return model
+}
+
+function normalizeImportedModel(input: unknown): CanonicalModel {
+  if (!input || typeof input !== 'object') return emptyModel('Imported Flow')
+  const raw = input as Partial<CanonicalModel>
+  const model = emptyModel(raw.title?.trim() || 'Imported Flow')
+
+  const rawNodes = Array.isArray(raw.nodes) ? raw.nodes : []
+  const normalizedNodes: FlowNode[] = rawNodes
+    .map((candidate, index) => {
+      if (!candidate || typeof candidate !== 'object') return null
+      const item = candidate as Partial<FlowNode>
+      const id = typeof item.id === 'string' && item.id.trim() ? item.id : mkId('n')
+      const label =
+        typeof item.label === 'string' && item.label.trim() ? item.label.trim() : `Imported Step ${index + 1}`
+      const type = inferNodeTypeFromText(typeof item.type === 'string' ? item.type : label)
+      const position = item.position as XY | undefined
+      return {
+        id,
+        type,
+        label,
+        actor: actorFromText(typeof item.actor === 'string' ? item.actor : ''),
+        status: item.status === 'planned' || item.status === 'deprecated' ? item.status : 'live',
+        metadata: typeof item.metadata === 'object' && item.metadata !== null ? item.metadata : {},
+        evidence: Array.isArray(item.evidence) ? item.evidence : undefined,
+        confidence: normalizeConfidence(item.confidence, 0.66),
+        origin: (item.origin as Origin) ?? 'text_import',
+        position: {
+          x: typeof position?.x === 'number' ? position.x : 140 + (index % 4) * 200,
+          y: typeof position?.y === 'number' ? position.y : 120 + Math.floor(index / 4) * 140,
+        },
+      } as FlowNode
+    })
+    .filter((node): node is FlowNode => node !== null)
+
+  const nodeById = new Map(normalizedNodes.map((node) => [node.id, node]))
+
+  const rawEdges = Array.isArray(raw.edges) ? raw.edges : []
+  const normalizedEdges: EdgeModel[] = rawEdges
+    .map((candidate) => {
+      if (!candidate || typeof candidate !== 'object') return null
+      const item = candidate as Partial<EdgeModel>
+      if (typeof item.from !== 'string' || typeof item.to !== 'string') return null
+      if (!nodeById.has(item.from) || !nodeById.has(item.to)) return null
+      return {
+        id: typeof item.id === 'string' && item.id.trim() ? item.id : mkId('e'),
+        from: item.from,
+        to: item.to,
+        type: normalizeEdgeType(typeof item.type === 'string' ? item.type : 'sequential'),
+        label: typeof item.label === 'string' ? item.label : '',
+        evidence: Array.isArray(item.evidence) ? item.evidence : undefined,
+        confidence: normalizeConfidence(item.confidence, 0.66),
+        origin: (item.origin as Origin) ?? 'text_import',
+      } as EdgeModel
+    })
+    .filter((edge): edge is EdgeModel => edge !== null)
+
+  model.nodes = normalizedNodes
+  model.edges = normalizedEdges
+  model.sourceDocs = Array.isArray(raw.sourceDocs) ? raw.sourceDocs : []
+  model.confidence = {
+    overall: normalizeConfidence(raw.confidence?.overall, 0.66),
+    extraction: normalizeConfidence(raw.confidence?.extraction, 0.68),
+    synthesis: normalizeConfidence(raw.confidence?.synthesis, 0.68),
+    validationPenalty: normalizeConfidence(raw.confidence?.validationPenalty, 0),
+  }
+  model.validation = Array.isArray(raw.validation)
+    ? (raw.validation.filter(Boolean) as ValidationResult[])
+    : []
+  model.nodes.forEach((node) => {
+    model.projections.flow.nodePositions[node.id] = node.position
+    model.projections.map.nodePositions[node.id] = {
+      x: node.position.x * 0.9,
+      y: node.position.y * 0.7,
+    }
+  })
+  validate(model)
+  return model
+}
+
+function applyModelToSelectedVersion(state: AppState, model: CanonicalModel): AppState {
+  const next = clone(state)
+  const ref = getCurrentVersionRef(next)
+  if (!ref) return state
+  const previousState = ref.version.reviewState
+  validate(model)
+  ref.version.data = clone(model)
+  ref.version.reviewState = 'draft'
+  ref.version.reviewAudit = [
+    ...(ref.version.reviewAudit ?? []),
+    {
+      id: mkId('audit'),
+      at: now(),
+      by: 'local-user',
+      event: 'state_transition',
+      from: previousState,
+      to: 'draft',
+      note: 'Imported candidate replaced current version content.',
+    },
+  ]
+  next.selectedTab = 'flow'
+  next.selectedNodeId = null
+  next.selectedEdgeId = null
+  ref.artifact.updatedAt = now()
+  next.history = [clone(ref.version.data)]
+  next.historyIndex = 0
+  return next
+}
+
 function getCurrentVersionRef(state: AppState) {
   const artifact = state.artifacts.find((a) => a.id === state.selectedArtifactId)
   if (!artifact) return null
@@ -126,11 +464,6 @@ function updateCurrentVersion(state: AppState, updater: (model: CanonicalModel) 
   ref.artifact.updatedAt = now()
   pushHistory(next, ref.version.data)
   return next
-}
-
-function normalizeReviewState(state: string): ReviewState {
-  if (state === 'draft' || state === 'in_review' || state === 'approved' || state === 'rejected') return state
-  return 'draft'
 }
 
 const initial = hydrate() ?? seedState()
@@ -187,6 +520,7 @@ export const usePMStore = create<PMStore>((set, get) => ({
             schemaVersion: '1.1',
             data: model,
             reviewState: 'draft',
+            reviewAudit: [],
             createdBy: 'local-user',
             createdAt: now(),
           },
@@ -286,6 +620,7 @@ export const usePMStore = create<PMStore>((set, get) => ({
             schemaVersion: '1.1',
             data: model,
             reviewState: 'draft',
+            reviewAudit: [],
             createdBy: 'local-user',
             createdAt: now(),
           },
@@ -337,6 +672,7 @@ export const usePMStore = create<PMStore>((set, get) => ({
         schemaVersion: '1.1',
         data: clone(currentVersion.data),
         reviewState: 'draft',
+        reviewAudit: [],
         createdBy: 'local-user',
         createdAt: now(),
       })
@@ -402,14 +738,303 @@ export const usePMStore = create<PMStore>((set, get) => ({
       if (!artifact) return state
       const version = artifact.versions.find((item) => item.id === versionId)
       if (!version) return state
+      const fromState = version.reviewState
       version.reviewState = normalizeReviewState(reviewState)
+      if (version.reviewState === 'approved') {
+        const hasBlockingIssues = version.data.validation.some((issue) => issue.severity === 'error')
+        if (hasBlockingIssues) {
+          version.reviewAudit = [
+            ...(version.reviewAudit ?? []),
+            {
+              id: mkId('audit'),
+              at: now(),
+              by: 'local-user',
+              event: 'policy_block',
+              from: fromState,
+              to: 'approved',
+              note: 'Blocked: version has validation errors.',
+            },
+          ]
+          version.reviewState = 'in_review'
+          persist(next)
+          return next
+        }
+      }
+
+      if (version.reviewState === 'approved') {
+        const hasUngatedLowConfidence = version.data.confidence.overall < 0.78
+        if (hasUngatedLowConfidence) {
+          version.reviewAudit = [
+            ...(version.reviewAudit ?? []),
+            {
+              id: mkId('audit'),
+              at: now(),
+              by: 'local-user',
+              event: 'policy_block',
+              from: fromState,
+              to: 'approved',
+              note: 'Blocked: confidence below auto-approve threshold (0.78).',
+            },
+          ]
+          version.reviewState = 'in_review'
+          persist(next)
+          return next
+        }
+      }
+
       if (version.reviewState === 'approved') {
         artifact.currentApprovedVersionId = version.id
       }
+      version.reviewAudit = [
+        ...(version.reviewAudit ?? []),
+        {
+          id: mkId('audit'),
+          at: now(),
+          by: 'local-user',
+          event: 'state_transition',
+          from: fromState,
+          to: version.reviewState,
+          note: 'Manual review state update.',
+        },
+      ]
       artifact.updatedAt = now()
       persist(next)
       return next
     })
+  },
+
+  requestReviewTransition: (versionId, nextState, note) => {
+    let result = { ok: false, message: 'Select a valid version first.' }
+    set((state) => {
+      const next = clone(state)
+      const artifact = next.artifacts.find((item) => item.id === next.selectedArtifactId)
+      if (!artifact) return state
+      const version = artifact.versions.find((item) => item.id === versionId)
+      if (!version) return state
+
+      const fromState = version.reviewState
+      if (nextState === 'approved') {
+        const hasBlockingIssues = version.data.validation.some((issue) => issue.severity === 'error')
+        if (hasBlockingIssues) {
+          version.reviewAudit = [
+            ...(version.reviewAudit ?? []),
+            {
+              id: mkId('audit'),
+              at: now(),
+              by: 'policy-engine',
+              event: 'policy_block',
+              from: fromState,
+              to: nextState,
+              note: 'Blocked: unresolved validation errors.',
+            },
+          ]
+          version.reviewState = 'in_review'
+          artifact.updatedAt = now()
+          persist(next)
+          result = { ok: false, message: 'Approval blocked by policy: validation errors present.' }
+          return next
+        }
+        if (version.data.confidence.overall < 0.78) {
+          version.reviewAudit = [
+            ...(version.reviewAudit ?? []),
+            {
+              id: mkId('audit'),
+              at: now(),
+              by: 'policy-engine',
+              event: 'policy_block',
+              from: fromState,
+              to: nextState,
+              note: 'Blocked: confidence below approval threshold (0.78).',
+            },
+          ]
+          version.reviewState = 'in_review'
+          artifact.updatedAt = now()
+          persist(next)
+          result = { ok: false, message: 'Approval blocked by policy: low confidence.' }
+          return next
+        }
+      }
+
+      version.reviewState = nextState
+      version.reviewAudit = [
+        ...(version.reviewAudit ?? []),
+        {
+          id: mkId('audit'),
+          at: now(),
+          by: 'local-user',
+          event: 'state_transition',
+          from: fromState,
+          to: nextState,
+          note: note ?? 'Manual review transition',
+        },
+      ]
+      if (nextState === 'approved') artifact.currentApprovedVersionId = version.id
+      artifact.updatedAt = now()
+      persist(next)
+      result = { ok: true, message: `Review moved ${fromState} -> ${nextState}.` }
+      return next
+    })
+    return result
+  },
+
+  importFromText: (text) => {
+    const trimmed = text.trim()
+    if (!trimmed) return { ok: false, message: 'Text import failed: empty input.' }
+    const imported = importModelFromText(trimmed)
+    set((state) => {
+      const next = applyModelToSelectedVersion(state, imported)
+      persist(next)
+      return next
+    })
+    return {
+      ok: true,
+      message: `Text import generated ${imported.nodes.length} nodes and ${imported.edges.length} edges.`,
+    }
+  },
+
+  importFromDocument: (payload) => {
+    const trimmed = payload.trim()
+    if (!trimmed) return { ok: false, message: 'Document import failed: no extractable text found.' }
+    const imported = importModelFromDoc(trimmed)
+    set((state) => {
+      const next = applyModelToSelectedVersion(state, imported)
+      persist(next)
+      return next
+    })
+    return {
+      ok: true,
+      message: `Document import generated ${imported.nodes.length} nodes and ${imported.edges.length} edges.`,
+    }
+  },
+
+  importFromAiAssist: (prompt: string) => {
+    const imported = importModelFromAiPrompt(prompt)
+    set((state) => {
+      const next = applyModelToSelectedVersion(state, imported)
+      persist(next)
+      return next
+    })
+    return {
+      ok: true,
+      message: `AI assist generated ${imported.nodes.length} candidate nodes. Routed for review.`,
+    }
+  },
+
+  importFromJson: (rawJson) => {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(rawJson)
+    } catch {
+      return { ok: false, message: 'Import failed: invalid JSON format.' }
+    }
+    const imported = normalizeImportedModel(parsed)
+    if (imported.nodes.length === 0) {
+      return { ok: false, message: 'Import failed: no valid nodes found in JSON.' }
+    }
+    set((state) => {
+      const next = applyModelToSelectedVersion(state, imported)
+      persist(next)
+      return next
+    })
+    return {
+      ok: true,
+      message: `JSON import applied ${imported.nodes.length} nodes and ${imported.edges.length} edges.`,
+    }
+  },
+
+  runValidation: () => {
+    let output: { errors: number; warns: number } = { errors: 0, warns: 0 }
+    set((state) => {
+      const next = clone(state)
+      const ref = getCurrentVersionRef(next)
+      if (!ref) return state
+      validate(ref.version.data)
+      output = {
+        errors: ref.version.data.validation.filter((item) => item.severity === 'error').length,
+        warns: ref.version.data.validation.filter((item) => item.severity === 'warn').length,
+      }
+      ref.artifact.updatedAt = now()
+      persist(next)
+      return next
+    })
+    return output
+  },
+
+  runValidationForCurrentVersion: () => {
+    let issues: ValidationResult[] = []
+    set((state) => {
+      const next = clone(state)
+      const ref = getCurrentVersionRef(next)
+      if (!ref) return state
+      validate(ref.version.data)
+      issues = clone(ref.version.data.validation)
+      ref.artifact.updatedAt = now()
+      persist(next)
+      return next
+    })
+    return issues
+  },
+
+  canTransitionToReviewState: (versionId: string, nextState: ReviewState) => {
+    const state = get()
+    const artifact = state.artifacts.find((item) => item.id === state.selectedArtifactId)
+    if (!artifact) return { allowed: false, reason: 'No selected artifact.' }
+    const version = artifact.versions.find((item) => item.id === versionId)
+    if (!version) return { allowed: false, reason: 'Version not found.' }
+    if (nextState !== 'approved') return { allowed: true, reason: 'Transition allowed.' }
+    const hasErrors = version.data.validation.some((issue) => issue.severity === 'error')
+    if (hasErrors) return { allowed: false, reason: 'Blocking validation errors.' }
+    if (version.data.confidence.overall < 0.78) {
+      return { allowed: false, reason: 'Confidence below 0.78 threshold.' }
+    }
+    return { allowed: true, reason: 'Validation and confidence satisfy policy.' }
+  },
+
+  getReviewAuditTrail: () => {
+    const state = get()
+    const ref = getCurrentVersionRef(state)
+    if (!ref) return []
+    const version = ref.version
+    const model = version.data
+    const hasErrors = model.validation.some((item) => item.severity === 'error')
+    const lowConfidence = model.confidence.overall < 0.78
+    const route = version.reviewState === 'approved' ? 'auto-approve' : 'human-review'
+    return [
+      `Version: ${version.name} (${version.id})`,
+      `Review state: ${version.reviewState}`,
+      `Confidence overall: ${model.confidence.overall.toFixed(2)}`,
+      `Validation: ${model.validation.length} issues (${hasErrors ? 'blocking' : 'non-blocking'})`,
+      `Policy route: ${route}${lowConfidence ? ' (low confidence)' : ''}`,
+      `Timestamp: ${now()}`,
+    ]
+  },
+
+  sendCurrentVersionToReview: () => {
+    const state = get()
+    const ref = getCurrentVersionRef(state)
+    if (!ref) return false
+    const result = get().requestReviewTransition(ref.version.id, 'in_review', 'Submitted for human review.')
+    return result.ok
+  },
+
+  autoGateCurrentVersion: () => {
+    const state = get()
+    const ref = getCurrentVersionRef(state)
+    if (!ref) return null
+    const policy = get().canTransitionToReviewState(ref.version.id, 'approved')
+    const nextState: ReviewState = policy.allowed ? 'approved' : 'in_review'
+    const transition = get().requestReviewTransition(
+      ref.version.id,
+      nextState,
+      policy.allowed
+        ? 'Auto-gated to approved by confidence/validation policy.'
+        : `Auto-routed to in_review: ${policy.reason}`,
+    )
+    if (!transition.ok) return null
+    return {
+      state: nextState,
+      reason: policy.allowed ? 'Confidence and validation satisfy policy.' : policy.reason,
+    }
   },
 
   addNodeToCurrentVersion: (node) => {

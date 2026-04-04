@@ -136,6 +136,7 @@ export function seedState(): AppState {
     schemaVersion: '1.1',
     data: model,
     reviewState: 'draft',
+    reviewAudit: [],
     createdBy: 'system',
     createdAt: now(),
   }

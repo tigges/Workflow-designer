@@ -2,6 +2,7 @@ export type SchemaVersion = '1.1'
 
 export type ReviewState = 'draft' | 'in_review' | 'approved' | 'rejected'
 export type ViewTab = 'flow' | 'map'
+export type ImportMode = 'manual' | 'text' | 'doc' | 'ai'
 
 export type Actor = '' | 'customer' | 'agent' | 'system' | 'manager' | 'external'
 export type Origin = 'manual' | 'text_import' | 'doc_import' | 'ai_assist'
@@ -107,6 +108,18 @@ export type ValidationResult = {
   targetId?: string
 }
 
+export type ReviewAuditEvent = 'state_transition' | 'policy_block'
+
+export type ReviewAuditEntry = {
+  id: string
+  at: string
+  by: string
+  event: ReviewAuditEvent
+  from: ReviewState
+  to: ReviewState
+  note?: string
+}
+
 export type CanonicalModel = {
   id: string
   title: string
@@ -128,6 +141,7 @@ export type MapVersion = {
   schemaVersion: SchemaVersion
   data: CanonicalModel
   reviewState: ReviewState
+  reviewAudit: ReviewAuditEntry[]
   createdBy: string
   createdAt: string
 }
@@ -174,6 +188,21 @@ export type PMStore = AppState & {
   updateNodeLabel: (nodeId: string, label: string) => void
   updateNodeActor: (nodeId: string, actor: Actor) => void
   setVersionReviewState: (versionId: string, reviewState: string) => void
+  requestReviewTransition: (versionId: string, nextState: ReviewState, note?: string) => {
+    ok: boolean
+    message: string
+  }
+  importFromText: (input: string) => { ok: boolean; message: string }
+  importFromDocument: (input: string) => { ok: boolean; message: string }
+  importFromAiAssist: (prompt: string) => { ok: boolean; message: string }
+  importFromJson: (rawJson: string) => { ok: boolean; message: string }
+  runValidation: () => { errors: number; warns: number }
+  runValidationForCurrentVersion: () => ValidationResult[]
+  canTransitionToReviewState: (
+    versionId: string,
+    nextState: ReviewState,
+  ) => { allowed: boolean; reason: string }
+  getReviewAuditTrail: () => string[]
   addNodeToCurrentVersion: (node: FlowNode) => void
   removeNodeFromCurrentVersion: (nodeId: string) => void
   addEdgeToCurrentVersion: (edge: FlowEdge) => void

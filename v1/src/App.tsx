@@ -78,8 +78,8 @@ const PALETTE_NODE_MIME = 'application/flowcraft-node-type'
 
 const FEATURE_AVAILABILITY = {
   templates: false,
-  aiAssist: false,
-  importJson: false,
+  aiAssist: true,
+  importJson: true,
 } as const
 
 type EdgeMode = 'auto' | 'manual'
@@ -250,6 +250,14 @@ export default function App() {
     updateEdgeLabel,
     updateEdgeType,
     setVersionReviewState,
+    runValidation,
+    importFromText,
+    importFromDocument,
+    importFromAiAssist,
+    importFromJson,
+    requestReviewTransition,
+    canTransitionToReviewState,
+    getReviewAuditTrail,
     addNodeToCurrentVersion,
     addEdgeToCurrentVersion,
     removeNodeFromCurrentVersion,
@@ -263,6 +271,8 @@ export default function App() {
   const [activeTemplate, setActiveTemplate] = useState<(typeof TEMPLATE_TABS)[number]>('Support')
   const [activeEdgeType, setActiveEdgeType] = useState<EdgeType>('sequential')
   const [edgeMode, setEdgeMode] = useState<EdgeMode>(() => readStoredEdgeMode())
+  const [importTextDraft, setImportTextDraft] = useState('')
+  const [importBusy, setImportBusy] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [headerNotice, setHeaderNotice] = useState('')
   const [structureOpen, setStructureOpen] = useState(() =>
@@ -318,6 +328,10 @@ export default function App() {
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(rfNodeSeed)
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(rfEdgeSeed)
   const nodeTypes = useMemo(() => ({ workflowNode: FlowNodeView }), [])
+  const reviewAuditTrail = useMemo(
+    () => (selectedVersion ? getReviewAuditTrail().slice(-8) : []),
+    [getReviewAuditTrail, selectedVersion],
+  )
 
   useEffect(() => {
     setRfNodes(rfNodeSeed)
@@ -522,11 +536,12 @@ export default function App() {
       setHeaderNotice('Select or create a version to validate.')
       return
     }
-    const warnOrErrorCount = validation.filter((item) => item.severity !== 'info').length
+    const result = runValidation()
+    const warnOrErrorCount = result.errors + result.warns
     setHeaderNotice(
       warnOrErrorCount === 0
         ? 'Validation passed. No issues found.'
-        : `Validation found ${warnOrErrorCount} issue${warnOrErrorCount > 1 ? 's' : ''}.`,
+        : `Validation found ${result.errors} error(s) and ${result.warns} warning(s).`,
     )
   }
 
@@ -585,12 +600,76 @@ export default function App() {
     setHeaderNotice('Exported SVG snapshot successfully.')
   }
 
-  function handleImportJson(event: React.ChangeEvent<HTMLInputElement>) {
-    if (event.target.files?.[0]) {
-      setHeaderNotice(`Selected ${event.target.files[0].name}. Import adapter will be connected soon.`)
+  async function handleImportJson(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) {
+      setHeaderNotice('No file selected for JSON import.')
       return
     }
-    setHeaderNotice('Import adapter will be connected in a following phase.')
+    setImportBusy(true)
+    try {
+      const raw = await file.text()
+      const result = importFromJson(raw)
+      setHeaderNotice(result.message)
+    } finally {
+      setImportBusy(false)
+      event.target.value = ''
+    }
+  }
+
+  function handleImportText() {
+    const result = importFromText(importTextDraft)
+    setHeaderNotice(result.message)
+    if (result.ok) setImportTextDraft('')
+  }
+
+  function handleImportDocumentFromDraft() {
+    const result = importFromDocument(importTextDraft)
+    setHeaderNotice(result.message)
+  }
+
+  async function handleImportDocumentFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setImportBusy(true)
+    try {
+      const content = await file.text()
+      const payload = content.trim() || `Document: ${file.name}`
+      const result = importFromDocument(payload)
+      setHeaderNotice(result.message)
+    } finally {
+      setImportBusy(false)
+      event.target.value = ''
+    }
+  }
+
+  function handleAiAssistGenerate() {
+    const result = importFromAiAssist(aiPrompt)
+    setHeaderNotice(result.message)
+  }
+
+  function handleSendToReview() {
+    if (!selectedVersion) {
+      setHeaderNotice('Select a version to review.')
+      return
+    }
+    const result = requestReviewTransition(selectedVersion.id, 'in_review', 'Submitted for review from sidebar')
+    setHeaderNotice(result.message)
+  }
+
+  function handleAutoGate() {
+    if (!selectedVersion) {
+      setHeaderNotice('Select a version to auto-gate.')
+      return
+    }
+    const suggested = canTransitionToReviewState(selectedVersion.id, 'approved')
+    const target = suggested.allowed ? 'approved' : 'in_review'
+    const result = requestReviewTransition(
+      selectedVersion.id,
+      target,
+      suggested.allowed ? 'Auto-approved by policy gate' : `Auto-routed to review: ${suggested.reason}`,
+    )
+    setHeaderNotice(result.message)
   }
 
   function handlePreviewClick(event: MouseEvent, featureName: string) {
@@ -898,6 +977,32 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+                <div className="sb-subhead">Import (Text / Doc Adapter)</div>
+                <div className="ai-prompt-wrap">
+                  <textarea
+                    className="ai-prompt"
+                    value={importTextDraft}
+                    onChange={(event) => setImportTextDraft(event.target.value)}
+                    placeholder="Paste process text or extracted document content (one step per line)"
+                  />
+                </div>
+                <div className="ct-grid">
+                  <button type="button" className="ct-btn" onClick={handleImportText} disabled={importBusy}>
+                    Import Text Candidate
+                  </button>
+                  <button
+                    type="button"
+                    className="ct-btn"
+                    onClick={handleImportDocumentFromDraft}
+                    disabled={importBusy}
+                  >
+                    Import as Document Candidate
+                  </button>
+                  <label className="ct-btn">
+                    Import Document File
+                    <input type="file" accept=".txt,.md,.csv,.json,.doc,.docx,.pdf" onChange={handleImportDocumentFile} />
+                  </label>
+                </div>
                 <div className="ai-prompt-wrap">
                   <textarea
                     className={`ai-prompt ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
@@ -916,7 +1021,11 @@ export default function App() {
                     title="Generate flow"
                     disabled={!FEATURE_AVAILABILITY.aiAssist}
                     onClick={(event) => {
-                      if (!FEATURE_AVAILABILITY.aiAssist) handlePreviewClick(event, 'AI Assist')
+                      if (!FEATURE_AVAILABILITY.aiAssist) {
+                        handlePreviewClick(event, 'AI Assist')
+                        return
+                      }
+                      handleAiAssistGenerate()
                     }}
                   >
                     →
@@ -926,6 +1035,14 @@ export default function App() {
                   {FEATURE_AVAILABILITY.aiAssist
                     ? 'Local fallback enabled.'
                     : 'Preview only - AI generation is not wired yet.'}
+                </div>
+                <div className="ct-grid">
+                  <button type="button" className="ct-btn" onClick={handleSendToReview}>
+                    Send Current Version to Review
+                  </button>
+                  <button type="button" className="ct-btn" onClick={handleAutoGate}>
+                    Auto Gate by Policy
+                  </button>
                 </div>
               </section>
             )}
@@ -1112,6 +1229,37 @@ export default function App() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="field-group">
+                <label>Validation</label>
+                <div className="val-list">
+                  {validation.length === 0 ? (
+                    <div className="val-row ok">No validation issues</div>
+                  ) : (
+                    validation.slice(0, 6).map((issue) => (
+                      <div
+                        key={`${issue.code}-${issue.targetId ?? 'global'}-${issue.message}`}
+                        className={`val-row ${issue.severity === 'error' ? 'error' : issue.severity === 'warn' ? 'warn' : 'ok'}`}
+                      >
+                        [{issue.code}] {issue.message}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div className="field-group">
+                <label>Review audit trail</label>
+                <div className="val-list">
+                  {reviewAuditTrail.length === 0 ? (
+                    <div className="val-row ok">No review audit entries yet</div>
+                  ) : (
+                    reviewAuditTrail.map((line) => (
+                      <div key={line} className="val-row ok">
+                        {line}
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
               <div className="inspector-actions">
                 <button
