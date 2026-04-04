@@ -147,6 +147,34 @@ type EdgeMode = 'auto' | 'manual'
 type CanvasTool = 'select' | 'connect'
 type StructureCluster = 'projects' | 'artifacts' | 'versions' | null
 type DraftSourceType = 'text' | 'document'
+type ImportStage = 'toc_seed' | 'detail_ingest' | 'review' | 'confirmed'
+
+const IMPORT_STAGE_STEPS: Array<{
+  id: ImportStage
+  label: string
+  hint: string
+}> = [
+  {
+    id: 'toc_seed',
+    label: 'Seed Clusters',
+    hint: 'Paste TOC text and shape top-level clusters/phases.',
+  },
+  {
+    id: 'detail_ingest',
+    label: 'Ingest Detail Docs',
+    hint: 'Import detailed text/documents into seeded clusters.',
+  },
+  {
+    id: 'review',
+    label: 'Review & Refine',
+    hint: 'Edit assignments and clean flow connections in Import Map.',
+  },
+  {
+    id: 'confirmed',
+    label: 'Confirm & Exit',
+    hint: 'Finalize import and continue in Journey Flow.',
+  },
+]
 
 const UI_STORAGE_KEYS = {
   structureOpen: 'flowcraft.ui.structureOpen',
@@ -388,6 +416,7 @@ export default function App() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [headerNotice, setHeaderNotice] = useState('')
+  const [importStage, setImportStage] = useState<ImportStage>('toc_seed')
   const [aiAssistExpanded, setAiAssistExpanded] = useState(false)
   const [sidebarVisible, setSidebarVisible] = useState(() =>
     readStoredBool(UI_STORAGE_KEYS.sidebarVisible, true),
@@ -497,6 +526,10 @@ export default function App() {
   useEffect(() => {
     if (!sidebarVisible && aiAssistExpanded) setAiAssistExpanded(false)
   }, [sidebarVisible, aiAssistExpanded])
+
+  useEffect(() => {
+    setImportStage('toc_seed')
+  }, [selectedVersionId])
 
   const canUndo = history.length > 1 && historyIndex > 0
 
@@ -844,22 +877,36 @@ export default function App() {
 
   function handleImportText() {
     const result = importFromText(aiPrompt)
+    if (result.ok) {
+      setAiPrompt('')
+      setTab('import_map')
+      if (importStage === 'toc_seed' || importStage === 'confirmed') {
+        setImportStage('detail_ingest')
+        setHeaderNotice(`${result.message} Proceed with detailed imports, then move to review.`)
+        return
+      }
+    }
     setHeaderNotice(result.message)
-    if (result.ok) setAiPrompt('')
   }
 
   function applyTemplateDescription(description: string) {
     setAiPrompt(description)
     setAiAssistExpanded(true)
     setSidebarVisible(true)
+    if (importStage === 'confirmed') setImportStage('toc_seed')
   }
 
   function applyQuickImportTemplate(lines: readonly string[], label: string, description: string) {
     const payload = lines.join('\n')
     const result = importFromText(payload)
     applyTemplateDescription(description)
+    if (result.ok) {
+      setTab('import_map')
+      if (importStage === 'toc_seed' || importStage === 'confirmed') {
+        setImportStage('detail_ingest')
+      }
+    }
     setHeaderNotice(result.ok ? `${label} template loaded. ${result.message}` : result.message)
-    if (result.ok) setTab('import_map')
   }
 
   function handleTemplateTabSelect(tab: (typeof TEMPLATE_TABS)[number]) {
@@ -876,6 +923,7 @@ export default function App() {
     }
     if (tab === 'Blank') {
       setTab('import_map')
+      setImportStage('toc_seed')
       setHeaderNotice('Blank template selected. Start shaping your import map manually.')
       return
     }
@@ -897,8 +945,16 @@ export default function App() {
 
   function handleImportDocumentFromDraft() {
     const result = importFromDocument(aiPrompt)
+    if (result.ok) {
+      setAiPrompt('')
+      setTab('import_map')
+      if (importStage === 'toc_seed' || importStage === 'confirmed') {
+        setImportStage('detail_ingest')
+        setHeaderNotice(`${result.message} Continue importing detail docs, then review in Import Map.`)
+        return
+      }
+    }
     setHeaderNotice(result.message)
-    if (result.ok) setAiPrompt('')
   }
 
   async function handleImportDocumentFile(event: React.ChangeEvent<HTMLInputElement>) {
@@ -909,6 +965,14 @@ export default function App() {
       const content = await file.text()
       const payload = content.trim() || `Document: ${file.name}`
       const result = importFromDocument(payload)
+      if (result.ok) {
+        setTab('import_map')
+        if (importStage === 'toc_seed' || importStage === 'confirmed') {
+          setImportStage('detail_ingest')
+          setHeaderNotice(`${result.message} Continue adding details before review.`)
+          return
+        }
+      }
       setHeaderNotice(result.message)
     } finally {
       setImportBusy(false)
@@ -918,7 +982,39 @@ export default function App() {
 
   function handleAiAssistGenerate() {
     const result = importFromAiAssist(aiPrompt)
+    if (result.ok) {
+      setTab('import_map')
+      if (importStage === 'toc_seed' || importStage === 'confirmed') {
+        setImportStage('detail_ingest')
+        setHeaderNotice(`${result.message} Detail ingestion started; move to review when ready.`)
+        return
+      }
+    }
     setHeaderNotice(result.message)
+  }
+
+  function handleImportStageAction() {
+    if (importStage === 'toc_seed') {
+      setImportStage('detail_ingest')
+      setTab('import_map')
+      setHeaderNotice('Cluster seeding marked complete. Start importing detailed process text.')
+      return
+    }
+    if (importStage === 'detail_ingest') {
+      setImportStage('review')
+      setTab('import_map')
+      setHeaderNotice('Moved to review stage. Refine clusters, phases, and connections.')
+      return
+    }
+    if (importStage === 'review') {
+      setImportStage('confirmed')
+      setTab('flow')
+      setHeaderNotice('Import confirmed. Continue polishing in Journey Flow.')
+      return
+    }
+    setImportStage('toc_seed')
+    setTab('import_map')
+    setHeaderNotice('Started new import cycle. Seed clusters from TOC first.')
   }
 
   function toggleImportMenu() {
@@ -964,6 +1060,15 @@ export default function App() {
     selectedTab === 'import_map'
       ? 'Chapter guide while refining imported content, then actor layers.'
       : 'Chapter guide across the full map, then actor layers.'
+  const importStageIndex = IMPORT_STAGE_STEPS.findIndex((step) => step.id === importStage)
+  const importStageActionLabel =
+    importStage === 'toc_seed'
+      ? 'Mark TOC seeded'
+      : importStage === 'detail_ingest'
+        ? 'Move to Review'
+        : importStage === 'review'
+          ? 'Confirm Import'
+          : 'Start New Import'
   const aiSidebarExpanded = aiAssistExpanded && sidebarVisible
   const workspaceClasses = `workspace ${!sidebarVisible ? 'sidebar-hidden' : ''} ${!inspectorVisible ? 'inspector-hidden' : ''} ${aiSidebarExpanded ? 'ai-expanded-horizontal' : ''}`
 
@@ -1089,6 +1194,34 @@ export default function App() {
               </button>
               {!FEATURE_AVAILABILITY.aiAssist && <span className="preview-pill">Preview</span>}
             </div>
+            <section className="import-stage-panel" aria-label="Import process stage">
+              <div className="import-stage-head">
+                <strong>Import process</strong>
+                <span>{IMPORT_STAGE_STEPS[importStageIndex]?.label ?? 'Seed Clusters'}</span>
+              </div>
+              <ol className="import-stage-list">
+                {IMPORT_STAGE_STEPS.map((step, index) => (
+                  <li
+                    key={step.id}
+                    className={`import-stage-item ${index < importStageIndex ? 'done' : index === importStageIndex ? 'active' : 'pending'}`}
+                  >
+                    <span className="import-stage-dot" aria-hidden />
+                    <span className="import-stage-copy">
+                      <span className="import-stage-label">{step.label}</span>
+                      <span className="import-stage-hint">{step.hint}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <button
+                type="button"
+                className="tiny-btn import-stage-action"
+                onClick={handleImportStageAction}
+                disabled={!selectedVersion}
+              >
+                {importStageActionLabel}
+              </button>
+            </section>
             <div className="ai-prompt-wrap">
               <textarea
                 className={`ai-prompt ${aiSidebarExpanded ? 'expanded' : ''} ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}

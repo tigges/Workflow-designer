@@ -681,6 +681,99 @@
   margin-bottom: 10px;
 }
 
+.import-stage-panel {
+  border: 1px solid #ced9f3;
+  background: #f8fbff;
+  border-radius: 8px;
+  padding: 8px 9px;
+  margin-bottom: 8px;
+}
+
+.import-stage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+
+.import-stage-head strong {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #5f6f88;
+}
+
+.import-stage-head span {
+  font-size: 10px;
+  font-weight: 700;
+  color: #2d6ef5;
+}
+
+.import-stage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.import-stage-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  border-radius: 7px;
+  padding: 4px 5px;
+}
+
+.import-stage-item.active {
+  background: #eaf2ff;
+}
+
+.import-stage-item.done {
+  background: rgba(15, 158, 110, 0.09);
+}
+
+.import-stage-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 4px;
+  background: #bbc5d8;
+  flex-shrink: 0;
+}
+
+.import-stage-item.active .import-stage-dot {
+  background: #2d6ef5;
+}
+
+.import-stage-item.done .import-stage-dot {
+  background: #0f9e6e;
+}
+
+.import-stage-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.import-stage-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #2d3443;
+}
+
+.import-stage-hint {
+  font-size: 10px;
+  color: #6b7585;
+}
+
+.import-stage-action {
+  width: 100%;
+  margin-top: 8px;
+}
+
 .ai-expand-btn {
   margin-left: auto;
 }
