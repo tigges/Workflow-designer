@@ -142,7 +142,22 @@ export type MapVersion = {
   data: CanonicalModel
   reviewState: ReviewState
   reviewAudit: ReviewAuditEntry[]
+  exportArtifacts: ExportArtifact[]
   createdBy: string
+  createdAt: string
+}
+
+export type ExportFormat = 'json' | 'mermaid' | 'svg' | 'png'
+
+export type ExportArtifact = {
+  id: string
+  artifactId: string
+  versionId: string
+  format: ExportFormat
+  fileName: string
+  mimeType: string
+  sizeBytes: number
+  checksum: string
   createdAt: string
 }
 
@@ -196,6 +211,14 @@ export type PMStore = AppState & {
   importFromDocument: (input: string) => { ok: boolean; message: string }
   importFromAiAssist: (prompt: string) => { ok: boolean; message: string }
   importFromJson: (rawJson: string) => { ok: boolean; message: string }
+  recordExportForSelectedVersion: (payload: {
+    format: ExportFormat
+    fileName: string
+    mimeType: string
+    sizeBytes: number
+    checksum: string
+  }) => void
+  getExportHistoryForSelectedVersion: () => ExportArtifact[]
   runValidation: () => { errors: number; warns: number }
   runValidationForCurrentVersion: () => ValidationResult[]
   canTransitionToReviewState: (

@@ -25,9 +25,19 @@ import {
 import '@xyflow/react/dist/style.css'
 import './App.css'
 import { buildDefaultEdge, buildDefaultNode, edgeStroke, usePMStore } from './store'
+import {
+  exportMimeType,
+  sha256Hex,
+  svgToPngBlob,
+  toJsonExportString,
+  toMermaidFlowchart,
+  toSvgSnapshot,
+  verifyJsonRoundtripLossless,
+} from './exportUtils'
 import type {
   Actor,
   EdgeType,
+  ExportFormat,
   FlowEdge,
   FlowNode,
   ReviewState,
@@ -132,15 +142,6 @@ function actorLabel(actor: Actor) {
 
 function reviewOptions(): ReviewState[] {
   return ['draft', 'in_review', 'approved', 'rejected']
-}
-
-function escapeXml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;')
 }
 
 function terminalRole(node: FlowNode): 'start' | 'end' | null {
@@ -258,6 +259,8 @@ export default function App() {
     importFromDocument,
     importFromAiAssist,
     importFromJson,
+    recordExportForSelectedVersion,
+    getExportHistoryForSelectedVersion,
     getReviewAuditTrail,
     addNodeToCurrentVersion,
     addEdgeToCurrentVersion,
@@ -274,6 +277,7 @@ export default function App() {
   const [edgeMode, setEdgeMode] = useState<EdgeMode>(() => readStoredEdgeMode())
   const [draftSourceType, setDraftSourceType] = useState<DraftSourceType>('text')
   const [importBusy, setImportBusy] = useState(false)
+  const [exportBusy, setExportBusy] = useState(false)
   const [importMenuOpen, setImportMenuOpen] = useState(false)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
@@ -337,6 +341,10 @@ export default function App() {
   const reviewAuditTrail = useMemo(
     () => (selectedVersion ? getReviewAuditTrail().slice(-8) : []),
     [getReviewAuditTrail, selectedVersion],
+  )
+  const exportHistory = useMemo(
+    () => (selectedVersion ? getExportHistoryForSelectedVersion().slice(-8).reverse() : []),
+    [getExportHistoryForSelectedVersion, selectedVersion],
   )
 
   useEffect(() => {
@@ -566,49 +574,105 @@ export default function App() {
     URL.revokeObjectURL(url)
   }
 
-  function handleExportJson() {
-    if (!currentModel) {
-      setHeaderNotice('Nothing to export yet. Create or select a version first.')
-      return
-    }
-    downloadFile('flowcraft-export.json', JSON.stringify(currentModel, null, 2), 'application/json')
-    setHeaderNotice('Exported JSON successfully.')
+  function downloadBlob(fileName: string, blob: Blob) {
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = fileName
+    anchor.click()
+    URL.revokeObjectURL(url)
   }
 
-  function handleExportSvg() {
+  async function recordExportMetadata(format: ExportFormat, fileName: string, payload: string | Blob) {
+    const bytes =
+      typeof payload === 'string' ? new TextEncoder().encode(payload).byteLength : payload.size
+    const checksum = await sha256Hex(payload)
+    recordExportForSelectedVersion({
+      format,
+      fileName,
+      mimeType: exportMimeType(format),
+      sizeBytes: bytes,
+      checksum,
+    })
+  }
+
+  async function handleExportJson() {
     if (!currentModel) {
       setHeaderNotice('Nothing to export yet. Create or select a version first.')
       return
     }
-    const width = 1400
-    const height = 900
-    const nodeById = new Map(currentModel.nodes.map((node) => [node.id, node]))
-    const edgeElements = currentModel.edges
-      .map((edge) => {
-        const source = nodeById.get(edge.from)
-        const target = nodeById.get(edge.to)
-        if (!source || !target) return ''
-        return `<line x1="${source.position.x + 70}" y1="${source.position.y + 28}" x2="${target.position.x + 70}" y2="${target.position.y + 28}" stroke="${edgeStroke(edge.type)}" stroke-width="1.7" />`
-      })
-      .join('')
-    const nodeElements = currentModel.nodes
-      .map((node) => {
-        const x = node.position.x
-        const y = node.position.y
-        return `
-        <rect x="${x}" y="${y}" rx="8" ry="8" width="140" height="56" fill="#ffffff" stroke="#d7dce5" />
-        <text x="${x + 10}" y="${y + 24}" fill="#1a1d23" font-family="DM Sans, Arial, sans-serif" font-size="12">${escapeXml(node.label)}</text>
-        <text x="${x + 10}" y="${y + 42}" fill="#647189" font-family="DM Sans, Arial, sans-serif" font-size="10">${escapeXml(actorLabel(node.actor))}</text>
-      `
-      })
-      .join('')
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-      <rect width="100%" height="100%" fill="#f8f9fb"/>
-      ${edgeElements}
-      ${nodeElements}
-    </svg>`
-    downloadFile('flowcraft-export.svg', svg, 'image/svg+xml')
-    setHeaderNotice('Exported SVG snapshot successfully.')
+    setExportBusy(true)
+    try {
+      const payload = toJsonExportString(currentModel)
+      const roundtrip = verifyJsonRoundtripLossless(currentModel)
+      if (!roundtrip.ok) {
+        setHeaderNotice(`JSON export blocked: ${roundtrip.reason}`)
+        return
+      }
+      const fileName = 'flowcraft-export.json'
+      downloadFile(fileName, payload, exportMimeType('json'))
+      await recordExportMetadata('json', fileName, payload)
+      setHeaderNotice('Exported JSON successfully (lossless roundtrip verified).')
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
+  async function handleExportMermaid() {
+    if (!currentModel) {
+      setHeaderNotice('Nothing to export yet. Create or select a version first.')
+      return
+    }
+    setExportBusy(true)
+    try {
+      const mermaid = toMermaidFlowchart(currentModel)
+      const fileName = 'flowcraft-export.mmd'
+      downloadFile(fileName, mermaid, exportMimeType('mermaid'))
+      await recordExportMetadata('mermaid', fileName, mermaid)
+      setHeaderNotice('Exported Mermaid flowchart successfully.')
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
+  async function handleExportSvg() {
+    if (!currentModel) {
+      setHeaderNotice('Nothing to export yet. Create or select a version first.')
+      return
+    }
+    setExportBusy(true)
+    try {
+      const svg = toSvgSnapshot(currentModel)
+      const fileName = 'flowcraft-export.svg'
+      downloadFile(fileName, svg, exportMimeType('svg'))
+      await recordExportMetadata('svg', fileName, svg)
+      setHeaderNotice('Exported SVG snapshot successfully.')
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
+  async function handleExportPng() {
+    if (!currentModel) {
+      setHeaderNotice('Nothing to export yet. Create or select a version first.')
+      return
+    }
+    setExportBusy(true)
+    try {
+      const width = 1400
+      const height = 900
+      const svg = toSvgSnapshot(currentModel, width, height)
+      const pngBlob = await svgToPngBlob(svg, width, height)
+      const fileName = 'flowcraft-export.png'
+      downloadBlob(fileName, pngBlob)
+      await recordExportMetadata('png', fileName, pngBlob)
+      setHeaderNotice('Exported PNG snapshot successfully.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'PNG export failed.'
+      setHeaderNotice(message)
+    } finally {
+      setExportBusy(false)
+    }
   }
 
   async function handleImportJson(event: React.ChangeEvent<HTMLInputElement>) {
@@ -785,11 +849,17 @@ export default function App() {
             {exportMenuOpen && (
               <div className="menu-pop" onMouseLeave={closeHeaderMenus}>
                 <div className="menu-head">Export options</div>
-                <button type="button" className="menu-item" onClick={handleExportJson}>
+                <button type="button" className="menu-item" onClick={handleExportJson} disabled={exportBusy}>
                   Export JSON
                 </button>
-                <button type="button" className="menu-item" onClick={handleExportSvg}>
+                <button type="button" className="menu-item" onClick={handleExportMermaid} disabled={exportBusy}>
+                  Export Mermaid
+                </button>
+                <button type="button" className="menu-item" onClick={handleExportSvg} disabled={exportBusy}>
                   Export SVG
+                </button>
+                <button type="button" className="menu-item" onClick={handleExportPng} disabled={exportBusy}>
+                  Export PNG
                 </button>
               </div>
             )}
@@ -1254,6 +1324,20 @@ export default function App() {
                     reviewAuditTrail.map((line) => (
                       <div key={line} className="val-row ok">
                         {line}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div className="field-group">
+                <label>Export history</label>
+                <div className="val-list">
+                  {exportHistory.length === 0 ? (
+                    <div className="val-row ok">No exports recorded yet</div>
+                  ) : (
+                    exportHistory.map((item) => (
+                      <div key={item.id} className="val-row ok">
+                        {item.format.toUpperCase()} - {item.fileName} ({item.sizeBytes} bytes)
                       </div>
                     ))
                   )}

@@ -137,6 +137,7 @@ export function seedState(): AppState {
     data: model,
     reviewState: 'draft',
     reviewAudit: [],
+    exportArtifacts: [],
     createdBy: 'system',
     createdAt: now(),
   }

@@ -7,6 +7,7 @@ import type {
   ConfidenceSummary,
   EdgeModel,
   EdgeType,
+  ExportArtifact,
   FlowEdge,
   FlowNode,
   FlowNodeType,
@@ -17,6 +18,7 @@ import type {
   ViewTab,
   XY,
 } from './types'
+import { parseJsonImport } from './exportUtils'
 
 const STORAGE_KEY = 'processmap-v1-store'
 
@@ -41,6 +43,9 @@ function hydrate(): AppState | null {
         ...version,
         reviewAudit: Array.isArray((version as { reviewAudit?: unknown }).reviewAudit)
           ? (version as { reviewAudit: typeof version.reviewAudit }).reviewAudit
+          : [],
+        exportArtifacts: Array.isArray((version as { exportArtifacts?: unknown }).exportArtifacts)
+          ? (version as { exportArtifacts: typeof version.exportArtifacts }).exportArtifacts
           : [],
       }))
     })
@@ -401,12 +406,16 @@ function normalizeImportedModel(input: unknown): CanonicalModel {
   return model
 }
 
-function applyModelToSelectedVersion(state: AppState, model: CanonicalModel): AppState {
+function applyModelToSelectedVersion(
+  state: AppState,
+  model: CanonicalModel,
+  options?: { preserveImportedValidation?: boolean },
+): AppState {
   const next = clone(state)
   const ref = getCurrentVersionRef(next)
   if (!ref) return state
   const previousState = ref.version.reviewState
-  validate(model)
+  if (!options?.preserveImportedValidation) validate(model)
   ref.version.data = clone(model)
   ref.version.reviewState = 'draft'
   ref.version.reviewAudit = [
@@ -521,6 +530,7 @@ export const usePMStore = create<PMStore>((set, get) => ({
             data: model,
             reviewState: 'draft',
             reviewAudit: [],
+            exportArtifacts: [],
             createdBy: 'local-user',
             createdAt: now(),
           },
@@ -621,6 +631,7 @@ export const usePMStore = create<PMStore>((set, get) => ({
             data: model,
             reviewState: 'draft',
             reviewAudit: [],
+            exportArtifacts: [],
             createdBy: 'local-user',
             createdAt: now(),
           },
@@ -673,6 +684,7 @@ export const usePMStore = create<PMStore>((set, get) => ({
         data: clone(currentVersion.data),
         reviewState: 'draft',
         reviewAudit: [],
+        exportArtifacts: [],
         createdBy: 'local-user',
         createdAt: now(),
       })
@@ -921,25 +933,71 @@ export const usePMStore = create<PMStore>((set, get) => ({
   },
 
   importFromJson: (rawJson) => {
-    let parsed: unknown
+    let imported: CanonicalModel
+    let importMode: 'lossless' | 'canonical' | 'normalized' = 'normalized'
     try {
-      parsed = JSON.parse(rawJson)
+      const parsed = parseJsonImport(rawJson)
+      if ((parsed.mode === 'lossless' || parsed.mode === 'canonical') && parsed.model) {
+        imported = clone(parsed.model)
+        importMode = parsed.mode
+      } else {
+        imported = normalizeImportedModel(JSON.parse(rawJson) as unknown)
+      }
     } catch {
       return { ok: false, message: 'Import failed: invalid JSON format.' }
     }
-    const imported = normalizeImportedModel(parsed)
     if (imported.nodes.length === 0) {
       return { ok: false, message: 'Import failed: no valid nodes found in JSON.' }
     }
     set((state) => {
-      const next = applyModelToSelectedVersion(state, imported)
+      const next = applyModelToSelectedVersion(
+        state,
+        imported,
+        importMode === 'normalized' ? undefined : { preserveImportedValidation: true },
+      )
       persist(next)
       return next
     })
+    const modeHint =
+      importMode === 'lossless'
+        ? ' Preserved export contract with lossless model roundtrip.'
+        : importMode === 'canonical'
+          ? ' Applied canonical model directly.'
+          : ''
     return {
       ok: true,
-      message: `JSON import applied ${imported.nodes.length} nodes and ${imported.edges.length} edges.`,
+      message: `JSON import applied ${imported.nodes.length} nodes and ${imported.edges.length} edges.${modeHint}`,
     }
+  },
+
+  recordExportForSelectedVersion: (payload) => {
+    set((state) => {
+      const next = clone(state)
+      const ref = getCurrentVersionRef(next)
+      if (!ref) return state
+      const record: ExportArtifact = {
+        id: mkId('exp'),
+        artifactId: ref.artifact.id,
+        versionId: ref.version.id,
+        format: payload.format,
+        fileName: payload.fileName,
+        mimeType: payload.mimeType,
+        sizeBytes: payload.sizeBytes,
+        checksum: payload.checksum,
+        createdAt: now(),
+      }
+      ref.version.exportArtifacts = [...(ref.version.exportArtifacts ?? []), record]
+      ref.artifact.updatedAt = now()
+      persist(next)
+      return next
+    })
+  },
+
+  getExportHistoryForSelectedVersion: () => {
+    const state = get()
+    const ref = getCurrentVersionRef(state)
+    if (!ref) return []
+    return clone(ref.version.exportArtifacts ?? [])
   },
 
   runValidation: () => {
