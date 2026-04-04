@@ -143,6 +143,10 @@ const FEATURE_AVAILABILITY = {
   importJson: true,
 } as const
 
+const PREP_FEATURE_FLAGS = {
+  importMapClustersLayer: false,
+} as const
+
 type EdgeMode = 'auto' | 'manual'
 type CanvasTool = 'select' | 'connect'
 type StructureCluster = 'projects' | 'artifacts' | 'versions' | null
@@ -419,6 +423,7 @@ export default function App() {
   const [aiPrompt, setAiPrompt] = useState('')
   const [headerNotice, setHeaderNotice] = useState('')
   const [importStage, setImportStage] = useState<ImportStage>('toc_seed')
+  const [importMapPhasesCollapsed, setImportMapPhasesCollapsed] = useState(true)
   const [aiAssistExpanded, setAiAssistExpanded] = useState(false)
   const [sidebarVisible, setSidebarVisible] = useState(() =>
     readStoredBool(UI_STORAGE_KEYS.sidebarVisible, true),
@@ -602,6 +607,49 @@ export default function App() {
     }
 
     return chunks
+  }, [currentModel])
+
+  const mapClusters = useMemo(() => {
+    const nodes = currentModel?.nodes ?? []
+    const stageBuckets = new Map<string, FlowNode[]>()
+    nodes.forEach((node) => {
+      const stage = node.metadata.stage?.trim()
+      if (!stage) return
+      const bucket = stageBuckets.get(stage) ?? []
+      bucket.push(node)
+      stageBuckets.set(stage, bucket)
+    })
+    if (stageBuckets.size > 0) {
+      return [...stageBuckets.entries()].map(([name, bucket], index) => {
+        const mappedSteps = bucket.filter((node) => node.type !== 'annotation')
+        const preview = mappedSteps.slice(0, 2).map((node) => node.label)
+        const extra = mappedSteps.length - preview.length
+        return {
+          id: `cluster-${index}`,
+          name,
+          count: mappedSteps.length,
+          summary:
+            mappedSteps.length === 0
+              ? 'Cluster seeded. Waiting for detailed step allocation.'
+              : `${preview.join(' -> ')}${extra > 0 ? ` +${extra} more` : ''}`,
+        }
+      })
+    }
+
+    const seededClusterLabels = [
+      ...new Set(
+        nodes
+          .filter((node) => node.type === 'annotation')
+          .map((node) => node.label.trim())
+          .filter((label) => label.length > 0),
+      ),
+    ]
+    return seededClusterLabels.map((label, index) => ({
+      id: `seed-cluster-${index}`,
+      name: label,
+      count: 0,
+      summary: 'Seeded cluster. Waiting for detail import.',
+    }))
   }, [currentModel])
 
   function handleCreateProject() {
@@ -1070,6 +1118,9 @@ export default function App() {
   }
 
   const isMapProjectionTab = selectedTab === 'map' || selectedTab === 'import_map'
+  const importMapClusterPrepEnabled =
+    PREP_FEATURE_FLAGS.importMapClustersLayer && selectedTab === 'import_map'
+  const mapPhasesCollapsedForImportMap = importMapClusterPrepEnabled && importMapPhasesCollapsed
   const mapPanelHeading = selectedTab === 'import_map' ? 'Import Map Projection' : 'Process Map Projection'
   const mapPanelHint =
     selectedTab === 'import_map'
@@ -1636,24 +1687,65 @@ export default function App() {
                   <p>{mapPanelHint}</p>
                 </div>
 
-                <section className="map-phase-guide">
+                {importMapClusterPrepEnabled && (
+                  <section className="map-cluster-guide">
+                    <div className="map-phase-head">
+                      <strong>Map Clusters</strong>
+                      <span>Import-map-only cluster layer (prep mode)</span>
+                    </div>
+                    <div className="map-cluster-strip">
+                      {mapClusters.length === 0 ? (
+                        <div className="map-cluster-empty">
+                          Seed clusters from TOC text to prepare import allocation.
+                        </div>
+                      ) : (
+                        mapClusters.map((cluster) => (
+                          <article key={cluster.id} className="map-cluster-chip">
+                            <h4>{cluster.name}</h4>
+                            <p>{cluster.summary}</p>
+                            <span className="count-pill">{cluster.count} mapped</span>
+                          </article>
+                        ))
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                <section className={`map-phase-guide ${mapPhasesCollapsedForImportMap ? 'collapsed' : ''}`}>
                   <div className="map-phase-head">
                     <strong>Map Phases</strong>
-                    <span>Chapter overview above customer layer</span>
+                    <div className="map-phase-head-actions">
+                      <span>Chapter overview above customer layer</span>
+                      {importMapClusterPrepEnabled && (
+                        <button
+                          type="button"
+                          className="tiny-btn map-phase-toggle"
+                          onClick={() => setImportMapPhasesCollapsed((collapsed) => !collapsed)}
+                        >
+                          {mapPhasesCollapsedForImportMap ? 'Show map phases' : 'Hide map phases'}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="map-phase-strip">
-                    {mapChapters.length === 0 ? (
-                      <div className="map-phase-empty">Add nodes in Journey Flow to generate chapter phases.</div>
-                    ) : (
-                      mapChapters.map((chapter) => (
-                        <article key={chapter.id} className="map-phase-chip">
-                          <h4>{chapter.title}</h4>
-                          <p>{chapter.summary}</p>
-                          <span className="count-pill">{chapter.count} steps</span>
-                        </article>
-                      ))
-                    )}
-                  </div>
+                  {mapPhasesCollapsedForImportMap ? (
+                    <div className="map-phase-collapsed-note">
+                      Map Phases hidden in Import Map focus mode. Use "Show map phases" to restore.
+                    </div>
+                  ) : (
+                    <div className="map-phase-strip">
+                      {mapChapters.length === 0 ? (
+                        <div className="map-phase-empty">Add nodes in Journey Flow to generate chapter phases.</div>
+                      ) : (
+                        mapChapters.map((chapter) => (
+                          <article key={chapter.id} className="map-phase-chip">
+                            <h4>{chapter.title}</h4>
+                            <p>{chapter.summary}</p>
+                            <span className="count-pill">{chapter.count} steps</span>
+                          </article>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </section>
 
                 {mapActorBuckets.length === 0 ? (
