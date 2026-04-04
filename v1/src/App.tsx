@@ -1259,8 +1259,14 @@ export default function App() {
                   onEdgesChange={onEdgesChange}
                   onConnect={handleConnect}
                   onNodeDragStop={onDragStop}
-                  onNodeClick={(_, node) => selectNode(node.id)}
-                  onEdgeClick={(_, edge) => selectEdge(edge.id)}
+                  onNodeClick={(_, node) => {
+                    if (!inspectorVisible) setInspectorVisible(true)
+                    selectNode(node.id)
+                  }}
+                  onEdgeClick={(_, edge) => {
+                    if (!inspectorVisible) setInspectorVisible(true)
+                    selectEdge(edge.id)
+                  }}
                   onPaneClick={() => {
                     selectNode(null)
                     selectEdge(null)
