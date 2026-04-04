@@ -2,13 +2,16 @@ import { useEffect, useMemo } from 'react'
 import {
   Background,
   Controls,
+  Handle,
   MiniMap,
+  Position,
   ReactFlow,
   useEdgesState,
   useNodesState,
   type Connection,
   type Edge,
   type Node,
+  type NodeProps,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import './App.css'
@@ -17,32 +20,36 @@ import type { Actor, EdgeType, FlowEdge, FlowNode, MapArtifact, MapVersion, Revi
 
 type RFNodeData = { label: string; actor: string; kind: FlowNode['type'] }
 
-function toRFNode(node: FlowNode): Node<RFNodeData> {
-  const colorByType: Record<FlowNode['type'], string> = {
+function FlowNodeView({ data }: NodeProps<Node<RFNodeData>>) {
+  const colorByKind: Record<RFNodeData['kind'], string> = {
     terminal: '#0f9e6e',
     process: '#2d6ef5',
     decision: '#8b45d4',
     data: '#d4720f',
     annotation: '#8a94a6',
   }
-  const color = colorByType[node.type]
+  const color = colorByKind[data.kind]
+  return (
+    <div className="flow-node-view" style={{ borderColor: `${color}66`, borderLeftColor: color }}>
+      <div className="flow-node-title">{data.label}</div>
+      <div className="flow-node-meta">{data.actor}</div>
+      <Handle type="target" position={Position.Top} className="flow-handle" />
+      <Handle type="source" position={Position.Bottom} className="flow-handle" />
+      <Handle type="source" position={Position.Right} className="flow-handle" />
+      <Handle type="target" position={Position.Left} className="flow-handle" />
+    </div>
+  )
+}
+
+function toRFNode(node: FlowNode): Node<RFNodeData> {
   return {
     id: node.id,
     position: node.position,
+    type: 'workflowNode',
     data: {
       label: node.label,
       actor: node.actor || 'unassigned',
       kind: node.type,
-    },
-    style: {
-      border: `1.4px solid ${color}66`,
-      borderLeft: node.type === 'process' ? `3px solid ${color}` : undefined,
-      borderRadius: node.type === 'terminal' ? 999 : 8,
-      fontSize: 12,
-      background: '#ffffff',
-      minWidth: 130,
-      padding: '8px 10px',
-      color: '#1a1d23',
     },
   }
 }
@@ -146,6 +153,7 @@ export default function App() {
   const rfEdgeSeed = useMemo(() => (currentModel ? currentModel.edges.map(toRFEdge) : []), [currentModel])
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(rfNodeSeed)
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(rfEdgeSeed)
+  const nodeTypes = useMemo(() => ({ workflowNode: FlowNodeView }), [])
 
   useEffect(() => {
     setRfNodes(rfNodeSeed)
@@ -369,6 +377,12 @@ export default function App() {
                     onNodeDragStop={onDragStop}
                     onNodeClick={(_, node) => selectNode(node.id)}
                     onEdgeClick={(_, edge) => selectEdge(edge.id)}
+                  nodeTypes={nodeTypes}
+                  nodesDraggable
+                  nodesConnectable
+                  elementsSelectable
+                  edgesFocusable
+                  panOnDrag
                     fitView
                   >
                     <Background />

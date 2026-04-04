@@ -189,6 +189,7 @@
   background: #f9fbff;
   min-height: 520px;
   height: calc(100vh - 136px);
+  position: relative;
 }
 
 .flow-help {
@@ -354,4 +355,55 @@
   .canvas {
     height: 520px;
   }
+}
+
+.pm-node {
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 138px;
+  background: #fff;
+  border: 1.4px solid #a9bde866;
+  color: #1a1d23;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.pm-node-header {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.pm-node-meta {
+  font-size: 10px;
+  color: #647189;
+}
+
+.pm-node.process {
+  border-left: 3px solid #2d6ef5;
+}
+
+.pm-node.decision {
+  border-color: #8b45d466;
+}
+
+.pm-node.terminal {
+  border-radius: 999px;
+  border-color: #0f9e6e66;
+}
+
+.pm-node.data {
+  border-color: #d4720f66;
+}
+
+.pm-node.annotation {
+  border-style: dashed;
+  border-color: #8a94a666;
+}
+
+.pm-handle {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid #c4ccdb;
+  background: #fff;
 }

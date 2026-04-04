@@ -549,11 +549,18 @@ export function edgeStroke(type: EdgeType) {
   return '#9fa9b9'
 }
 
-export function buildDefaultNode(index: number): FlowNode {
+export function buildDefaultNode(index: number, type: FlowNode['type'] = 'process'): FlowNode {
+  const defaults: Record<FlowNode['type'], string> = {
+    process: 'Process Step',
+    decision: 'Decision?',
+    terminal: 'Terminal',
+    data: 'Data / System',
+    annotation: 'Note',
+  }
   return {
     id: mkId('n'),
-    type: 'process',
-    label: 'New Step',
+    type,
+    label: defaults[type],
     actor: '',
     status: 'live',
     origin: 'manual',
