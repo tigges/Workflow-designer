@@ -43,7 +43,8 @@ type RFNodeData = {
 
 const TEMPLATE_TABS = ['Support', 'Onboarding', 'Sales', 'Blank'] as const
 
-const AI_CHIPS = ['Refund', 'Auth', 'Fulfillment', 'HR', 'Escalation', 'Approval']
+const AI_PLACEHOLDER =
+  'Type draft text (notes or extract). Use → to generate, or top-right Import draft to apply adapters.'
 
 const NODE_TYPE_OPTIONS: Array<{
   value: FlowNode['type']
@@ -85,14 +86,13 @@ const FEATURE_AVAILABILITY = {
 type EdgeMode = 'auto' | 'manual'
 type StructureCluster = 'projects' | 'artifacts' | 'versions' | null
 type DraftSourceType = 'text' | 'document'
-type MinimapDock = 'left' | 'right'
 
 const UI_STORAGE_KEYS = {
   structureOpen: 'flowcraft.ui.structureOpen',
   previewOpen: 'flowcraft.ui.previewOpen',
   structureCluster: 'flowcraft.ui.structureCluster',
   edgeMode: 'flowcraft.ui.edgeMode',
-  minimapDock: 'flowcraft.ui.minimapDock',
+  inspectorVisible: 'flowcraft.ui.inspectorVisible',
 } as const
 
 function readStoredBool(key: string, fallback: boolean): boolean {
@@ -118,12 +118,6 @@ function readStoredEdgeMode(): EdgeMode {
   if (typeof window === 'undefined') return 'auto'
   const raw = window.localStorage.getItem(UI_STORAGE_KEYS.edgeMode)
   return raw === 'manual' ? 'manual' : 'auto'
-}
-
-function readStoredMinimapDock(): MinimapDock {
-  if (typeof window === 'undefined') return 'right'
-  const raw = window.localStorage.getItem(UI_STORAGE_KEYS.minimapDock)
-  return raw === 'left' ? 'left' : 'right'
 }
 
 function actorText(actor: Actor) {
@@ -264,8 +258,6 @@ export default function App() {
     importFromDocument,
     importFromAiAssist,
     importFromJson,
-    requestReviewTransition,
-    canTransitionToReviewState,
     getReviewAuditTrail,
     addNodeToCurrentVersion,
     addEdgeToCurrentVersion,
@@ -285,8 +277,10 @@ export default function App() {
   const [importMenuOpen, setImportMenuOpen] = useState(false)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
-  const [minimapDock, setMinimapDock] = useState<MinimapDock>(() => readStoredMinimapDock())
   const [headerNotice, setHeaderNotice] = useState('')
+  const [inspectorVisible, setInspectorVisible] = useState(() =>
+    readStoredBool(UI_STORAGE_KEYS.inspectorVisible, true),
+  )
   const [structureOpen, setStructureOpen] = useState(() =>
     readStoredBool(UI_STORAGE_KEYS.structureOpen, true),
   )
@@ -374,8 +368,8 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    window.localStorage.setItem(UI_STORAGE_KEYS.minimapDock, minimapDock)
-  }, [minimapDock])
+    writeStoredBool(UI_STORAGE_KEYS.inspectorVisible, inspectorVisible)
+  }, [inspectorVisible])
 
   const canUndo = history.length > 1 && historyIndex > 0
 
@@ -674,30 +668,6 @@ export default function App() {
     setHeaderNotice(result.message)
   }
 
-  function handleSendToReview() {
-    if (!selectedVersion) {
-      setHeaderNotice('Select a version to review.')
-      return
-    }
-    const result = requestReviewTransition(selectedVersion.id, 'in_review', 'Submitted for review from sidebar')
-    setHeaderNotice(result.message)
-  }
-
-  function handleAutoGate() {
-    if (!selectedVersion) {
-      setHeaderNotice('Select a version to auto-gate.')
-      return
-    }
-    const suggested = canTransitionToReviewState(selectedVersion.id, 'approved')
-    const target = suggested.allowed ? 'approved' : 'in_review'
-    const result = requestReviewTransition(
-      selectedVersion.id,
-      target,
-      suggested.allowed ? 'Auto-approved by policy gate' : `Auto-routed to review: ${suggested.reason}`,
-    )
-    setHeaderNotice(result.message)
-  }
-
   function toggleImportMenu() {
     setImportMenuOpen((open) => {
       const next = !open
@@ -827,7 +797,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="workspace">
+      <main className={`workspace ${inspectorVisible ? '' : 'inspector-hidden'}`}>
         <aside className="sidebar">
           <section className={`ai-panel ai-top ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-section' : ''}`}>
             <div className="ai-panel-header">
@@ -837,25 +807,6 @@ export default function App() {
               </div>
               {!FEATURE_AVAILABILITY.aiAssist && <span className="preview-pill">Preview</span>}
             </div>
-            <div className="ai-chips">
-              {AI_CHIPS.map((chip) => (
-                <button
-                  key={chip}
-                  type="button"
-                  className={`ai-chip ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
-                  onClick={(event) => {
-                    if (!FEATURE_AVAILABILITY.aiAssist) {
-                      handlePreviewClick(event, 'AI Assist')
-                      return
-                    }
-                    setAiPrompt(`Draft a ${chip.toLowerCase()} workflow`)
-                  }}
-                >
-                  {chip}
-                </button>
-              ))}
-            </div>
-            <div className="sb-subhead">Draft Input</div>
             <div className="ai-prompt-wrap">
               <textarea
                 className={`ai-prompt ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
@@ -863,9 +814,7 @@ export default function App() {
                 onChange={(event) => setAiPrompt(event.target.value)}
                 readOnly={!FEATURE_AVAILABILITY.aiAssist}
                 placeholder={
-                  FEATURE_AVAILABILITY.aiAssist
-                    ? 'Type process draft here. This same text is used by top-right Import draft.'
-                    : 'AI Assist preview - generation will be enabled in a later phase'
+                  FEATURE_AVAILABILITY.aiAssist ? AI_PLACEHOLDER : 'AI Assist preview'
                 }
               />
               <button
@@ -884,28 +833,12 @@ export default function App() {
                 →
               </button>
             </div>
-            <div className="ai-status">
-              {FEATURE_AVAILABILITY.aiAssist
-                ? 'Shared draft input: use top-right Import with Text notes or Document extract.'
-                : 'Preview only - AI generation is not wired yet.'}
-            </div>
-            <div className="ct-grid">
-              <button type="button" className="ct-btn" onClick={handleSendToReview}>
-                Send Current Version to Review
-              </button>
-              <button type="button" className="ct-btn" onClick={handleAutoGate}>
-                Auto Gate by Policy
-              </button>
-            </div>
           </section>
 
           <section className="sb-sec build-sec">
             <div className="sb-row">
               <div className="sb-label">Build</div>
               <span className="section-note">Pinned</span>
-            </div>
-            <div className="build-hint">
-              Add node types first, then pick connection type and draw links on canvas.
             </div>
             <div className="sb-subhead">Node Types</div>
             {NODE_TYPE_OPTIONS.map((opt) => (
@@ -958,11 +891,6 @@ export default function App() {
                 </button>
               ))}
             </div>
-            <div className="mode-note">
-              {edgeMode === 'auto'
-                ? 'Auto picks connection type from node context.'
-                : 'Manual uses the selected connection type exactly.'}
-            </div>
           </section>
 
           <section className="sb-sec collapsible">
@@ -975,9 +903,6 @@ export default function App() {
               <span className="sb-label">Structure</span>
               <span className="collapse-indicator">{structureOpen ? '−' : '+'}</span>
             </button>
-            {!structureOpen && (
-              <div className="collapsed-note">Collapsed. Expand to access projects, artifacts, and versions.</div>
-            )}
             {structureOpen && (
               <div className="section-subcollapse">
                 <button
@@ -1103,12 +1028,7 @@ export default function App() {
               <span className="sb-label">Preview Features</span>
               <span className="collapse-indicator">{previewOpen ? '−' : '+'}</span>
             </button>
-            {!previewOpen && <div className="collapsed-note">Collapsed by default to keep build tools focused.</div>}
-            {previewOpen && (
-              <div className="collapsed-note">
-                Additional preview widgets will appear here as they are introduced.
-              </div>
-            )}
+            {previewOpen && <div />}
           </section>
         </aside>
 
@@ -1136,24 +1056,15 @@ export default function App() {
             >
               + Process Node
             </button>
-            <div className="dock-toggle" role="group" aria-label="Minimap dock side">
+            <div className="inspector-toggle-wrap" role="group" aria-label="Inspector visibility">
               <button
                 type="button"
-                className={`dock-btn ${minimapDock === 'left' ? 'active' : ''}`}
-                onClick={() => setMinimapDock('left')}
-                aria-pressed={minimapDock === 'left'}
-                title="Dock minimap left"
+                className={`dock-btn ${inspectorVisible ? 'active' : ''}`}
+                onClick={() => setInspectorVisible((current) => !current)}
+                aria-pressed={inspectorVisible}
+                title="Toggle inspector"
               >
-                L
-              </button>
-              <button
-                type="button"
-                className={`dock-btn ${minimapDock === 'right' ? 'active' : ''}`}
-                onClick={() => setMinimapDock('right')}
-                aria-pressed={minimapDock === 'right'}
-                title="Dock minimap right"
-              >
-                R
+                Inspector
               </button>
             </div>
             <span className="flow-hint">Tip: click/drag node types to add, then drag from handles to connect</span>
@@ -1196,8 +1107,12 @@ export default function App() {
                   fitView
                 >
                   <Background gap={24} color="#e6eaf1" />
-                  <MiniMap className={`floating-minimap dock-${minimapDock}`} position="bottom-right" />
-                  <Controls className={`floating-controls dock-${minimapDock}`} position="bottom-left" />
+                  {!inspectorVisible && (
+                    <>
+                      <MiniMap className="floating-minimap" position="bottom-right" />
+                      <Controls className="floating-controls" position="bottom-left" />
+                    </>
+                  )}
                 </ReactFlow>
               ) : (
                 <div className="canvas-empty">
@@ -1264,7 +1179,7 @@ export default function App() {
           </div>
         </section>
 
-        <aside className="inspector">
+        <aside className={`inspector ${!inspectorVisible ? 'hidden' : ''}`}>
           <h2>Inspector</h2>
           {!selectedVersion ? (
             <div className="inspector-empty">

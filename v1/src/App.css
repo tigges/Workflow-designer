@@ -363,6 +363,10 @@
   min-height: 0;
 }
 
+.workspace.inspector-hidden {
+  grid-template-columns: 230px 1fr;
+}
+
 .sidebar {
   background: var(--surface);
   border-right: 1px solid var(--border);
@@ -572,6 +576,10 @@
   padding: 12px;
   border-bottom: 1px solid var(--border);
   background: linear-gradient(135deg, #f0f4ff 0%, #f8f0ff 100%);
+}
+
+.ai-panel.ai-lean {
+  padding: 10px 12px;
 }
 
 .ai-panel-header {
@@ -927,35 +935,9 @@
   z-index: 5;
 }
 
-.dock-toggle {
+.canvas-top .inspector-toggle {
   margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.dock-btn {
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: #fff;
-  color: var(--text-dim);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  min-width: 24px;
-  height: 22px;
-  cursor: pointer;
-}
-
-.dock-btn.active {
-  border-color: #adc2fa;
-  background: var(--accent-light);
-  color: var(--accent);
-}
-
-.dock-btn:hover {
-  border-color: var(--border-hi);
+  min-width: 74px;
 }
 
 .tab-btn {
@@ -1378,6 +1360,10 @@
   padding: 12px;
 }
 
+.inspector.hidden {
+  display: none;
+}
+
 .inspector h2 {
   margin: 0 0 10px;
   font-size: 13px;
@@ -1473,11 +1459,6 @@
   overflow: hidden;
 }
 
-.canvas-wrap .react-flow__controls.dock-left {
-  left: 246px;
-  right: auto;
-}
-
 .canvas-wrap .react-flow__minimap {
   position: fixed;
   right: 272px;
@@ -1491,9 +1472,12 @@
   box-shadow: var(--shadow-md);
 }
 
-.canvas-wrap .react-flow__minimap.dock-left {
-  left: 246px;
-  right: auto;
+.workspace.inspector-hidden .canvas-wrap .react-flow__controls {
+  right: 16px;
+}
+
+.workspace.inspector-hidden .canvas-wrap .react-flow__minimap {
+  right: 16px;
 }
 
 @media (max-width: 1320px) {
@@ -1501,9 +1485,8 @@
     grid-template-columns: 210px 1fr 230px;
   }
 
-  .canvas-wrap .react-flow__controls.dock-left,
-  .canvas-wrap .react-flow__minimap.dock-left {
-    left: 222px;
+  .workspace.inspector-hidden {
+    grid-template-columns: 210px 1fr;
   }
 }
 
@@ -1538,10 +1521,6 @@
 
   .canvas-top {
     justify-content: flex-start;
-  }
-
-  .dock-toggle {
-    margin-left: 0;
   }
 
   .canvas-wrap .react-flow__controls {
