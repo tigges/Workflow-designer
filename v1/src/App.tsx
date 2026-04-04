@@ -391,6 +391,7 @@ export default function App() {
     importFromText,
     importFromDocument,
     importFromAiAssist,
+    clearCurrentVersion,
     importFromJson,
     recordExportForSelectedVersion,
     getExportHistoryForSelectedVersion,
@@ -886,6 +887,19 @@ export default function App() {
         return
       }
     }
+    setHeaderNotice(result.message)
+  }
+
+  function handleClearTemplate() {
+    const result = clearCurrentVersion()
+    if (!result.ok) {
+      setHeaderNotice(result.message)
+      return
+    }
+    setActiveTemplate('Blank')
+    setAiPrompt(BLANK_TEMPLATE_DESCRIPTION)
+    setImportStage('toc_seed')
+    setTab('import_map')
     setHeaderNotice(result.message)
   }
 
@@ -1478,6 +1492,15 @@ export default function App() {
                   {template.label}
                 </button>
               ))}
+              <button
+                type="button"
+                className="sti-pill clear"
+                onClick={handleClearTemplate}
+                disabled={!selectedVersion}
+                title="Reset current version to blank"
+              >
+                Clear
+              </button>
             </div>
             <button
               type="button"

@@ -210,6 +210,7 @@ export type PMStore = AppState & {
   importFromText: (input: string) => { ok: boolean; message: string }
   importFromDocument: (input: string) => { ok: boolean; message: string }
   importFromAiAssist: (prompt: string) => { ok: boolean; message: string }
+  clearCurrentVersion: () => { ok: boolean; message: string }
   importFromJson: (rawJson: string) => { ok: boolean; message: string }
   recordExportForSelectedVersion: (payload: {
     format: ExportFormat

@@ -932,6 +932,21 @@ export const usePMStore = create<PMStore>((set, get) => ({
     }
   },
 
+  clearCurrentVersion: () => {
+    const state = get()
+    const ref = getCurrentVersionRef(state)
+    if (!ref) {
+      return { ok: false, message: 'Clear failed: select a version first.' }
+    }
+    const blank = emptyModel('Import Draft')
+    set((current) => {
+      const next = applyModelToSelectedVersion(current, blank)
+      persist(next)
+      return next
+    })
+    return { ok: true, message: 'Cleared current version to a blank import draft.' }
+  },
+
   importFromJson: (rawJson) => {
     let imported: CanonicalModel
     let importMode: 'lossless' | 'canonical' | 'normalized' = 'normalized'

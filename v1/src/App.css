@@ -405,6 +405,17 @@
   cursor: not-allowed;
 }
 
+.sti-pill.clear {
+  border-color: #f1c6c4;
+  background: #fff3f2;
+  color: #c63f35;
+}
+
+.sti-pill.clear:hover:not(:disabled) {
+  border-color: #e9a6a3;
+  background: #ffeae8;
+}
+
 .import-map-badge {
   display: inline-flex;
   align-items: center;
