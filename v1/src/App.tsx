@@ -40,6 +40,7 @@ type RFNodeData = {
   actor: Actor
   kind: FlowNode['type']
   status: FlowNode['status']
+  terminalRole: 'start' | 'end' | null
 }
 
 const TEMPLATE_TABS = ['Support', 'Onboarding', 'Sales', 'Blank'] as const
@@ -106,9 +107,19 @@ function escapeXml(value: string) {
     .replaceAll("'", '&apos;')
 }
 
+function terminalRole(node: FlowNode): 'start' | 'end' | null {
+  if (node.type !== 'terminal') return null
+  const label = node.label.trim().toLowerCase()
+  if (label.startsWith('start')) return 'start'
+  if (label.startsWith('end') || label.startsWith('close') || label.startsWith('closed')) return 'end'
+  return null
+}
+
 function FlowNodeView({ data }: NodeProps<Node<RFNodeData>>) {
   return (
-    <div className={`fnode-card kind-${data.kind}`}>
+    <div
+      className={`fnode-card kind-${data.kind} ${data.terminalRole ? `terminal-${data.terminalRole}` : ''}`}
+    >
       <div className={`fnode-status-dot status-${data.status}`} />
       <div className="fnode-label">{data.label}</div>
       <div className="fnode-meta">
@@ -132,6 +143,7 @@ function toRFNode(node: FlowNode): Node<RFNodeData> {
       actor: node.actor,
       kind: node.type,
       status: node.status,
+      terminalRole: terminalRole(node),
     },
   }
 }
@@ -694,7 +706,7 @@ export default function App() {
               <button
                 key={opt.value}
                 type="button"
-                className="pal-card"
+                className={`pal-card ${opt.value}`}
                 draggable={Boolean(selectedVersion)}
                 onDragStart={(event) => handlePaletteDragStart(event, opt.value)}
                 onClick={() => handleAddNode(opt.value)}

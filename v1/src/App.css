@@ -433,6 +433,28 @@
   border-radius: 4px;
   border: 1.5px solid var(--c-process);
   flex-shrink: 0;
+  display: inline-block;
+  background: rgba(45, 110, 245, 0.07);
+}
+
+.pal-card.process {
+  border-left: 4px solid #2d6ef5;
+}
+
+.pal-card.decision {
+  border-left: 4px solid #f1bd3d;
+}
+
+.pal-card.terminal {
+  border-left: 4px solid #3fbf63;
+}
+
+.pal-card.data {
+  border-left: 4px solid #6c7c99;
+}
+
+.pal-card.annotation {
+  border-left: 4px solid #2f7af4;
 }
 
 .shape-process {
@@ -446,24 +468,37 @@
   transform: rotate(45deg);
   width: 14px;
   height: 14px;
+  display: inline-block;
+  border-radius: 2px;
 }
 
 .shape-terminal {
   border-color: var(--c-terminal);
   background: rgba(15, 158, 110, 0.07);
-  border-radius: 14px;
+  border-radius: 999px;
+  width: 20px;
+  height: 20px;
+  display: inline-block;
 }
 
 .shape-data {
   border-color: var(--c-data);
   background: rgba(212, 114, 15, 0.07);
   transform: skewX(-12deg);
+  width: 24px;
+  height: 16px;
+  display: inline-block;
+  border-radius: 2px;
 }
 
 .shape-annotation {
   border-color: var(--c-annotation);
   border-style: dashed;
   background: #f8f9fb;
+  width: 22px;
+  height: 16px;
+  display: inline-block;
+  border-radius: 2px;
 }
 
 .pal-info {
@@ -639,6 +674,7 @@
   padding: 10px 14px;
   text-align: center;
   box-shadow: var(--shadow-node);
+  padding-left: 16px;
 }
 
 .fnode-card.kind-decision {
@@ -647,18 +683,18 @@
   clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
   border: 1.5px solid #ddd0f5;
   border-left-width: 1.5px;
+  border-left-color: #f1bd3d;
 }
 
 .fnode-card.kind-terminal {
-  border-radius: 40px;
+  border-radius: 999px;
   border-color: #c8eee2;
-  border-left-color: var(--c-terminal);
 }
 
 .fnode-card.kind-data {
   transform: skewX(-8deg);
   border-color: #f3dfc0;
-  border-left-color: var(--c-data);
+  border-left-color: #6c7c99;
 }
 
 .fnode-card.kind-data .fnode-label,
@@ -668,15 +704,31 @@
 
 .fnode-card.kind-annotation {
   border: 1px dashed #d4c87a;
-  border-left: 1px dashed #d4c87a;
+  border-left: 1px dashed #2f7af4;
   border-radius: 4px;
   background: #fffef0;
+}
+
+.fnode-card.kind-terminal.term-start {
+  border-color: #bfead8;
+  border-left-color: #3fbf63;
+  background: linear-gradient(180deg, #ffffff 0%, #f6fcf8 100%);
+}
+
+.fnode-card.kind-terminal.term-end {
+  border-color: #f4c7c7;
+  border-left-color: #e24b4b;
+  background: linear-gradient(180deg, #ffffff 0%, #fff7f7 100%);
 }
 
 .fnode-label {
   font-size: 11.5px;
   font-weight: 600;
   color: var(--text);
+}
+
+.fnode-icon {
+  display: none;
 }
 
 .fnode-meta {
