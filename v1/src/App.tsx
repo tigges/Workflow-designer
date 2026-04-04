@@ -66,6 +66,8 @@ const EDGE_OPTIONS: Array<{ value: EdgeType; label: string }> = [
   { value: 'fallback', label: 'Fallback' },
 ]
 
+const EDGE_AUTO_MODE = true
+
 const ACTOR_OPTIONS: Array<{ value: Actor; label: string }> = [
   { value: '', label: 'Unassigned' },
   { value: 'customer', label: 'Customer' },
@@ -113,6 +115,18 @@ function terminalRole(node: FlowNode): 'start' | 'end' | null {
   if (label.startsWith('start')) return 'start'
   if (label.startsWith('end') || label.startsWith('close') || label.startsWith('closed')) return 'end'
   return null
+}
+
+function inferEdgeType(
+  sourceNode: FlowNode | undefined,
+  targetNode: FlowNode | undefined,
+  fallbackType: EdgeType,
+): EdgeType {
+  if (!sourceNode || !targetNode) return fallbackType
+  if (sourceNode.type === 'decision') return 'conditional'
+  if (targetNode.type === 'annotation') return 'fallback'
+  if (sourceNode.type === 'data' || targetNode.type === 'data') return 'parallel'
+  return 'sequential'
 }
 
 function FlowNodeView({ data }: NodeProps<Node<RFNodeData>>) {
@@ -413,8 +427,17 @@ export default function App() {
   function handleConnect(conn: Connection) {
     if (!conn.source || !conn.target) return
     const edge = buildDefaultEdge(conn.source, conn.target)
-    edge.type = activeEdgeType
+    const sourceNode = currentModel?.nodes.find((node) => node.id === conn.source)
+    const targetNode = currentModel?.nodes.find((node) => node.id === conn.target)
+    edge.type = EDGE_AUTO_MODE
+      ? inferEdgeType(sourceNode, targetNode, activeEdgeType)
+      : activeEdgeType
     addEdgeToCurrentVersion(edge)
+    setHeaderNotice(
+      EDGE_AUTO_MODE
+        ? `Connected with ${edge.type} (auto).`
+        : `Connected with ${edge.type} (manual).`,
+    )
   }
 
   function handleDeleteSelection() {
@@ -601,7 +624,12 @@ export default function App() {
               </button>
             ))}
 
-            <div className="sb-subhead">Connection Type</div>
+            <div className="sb-subhead">
+              Connection Type
+              <span className={`mode-tag ${EDGE_AUTO_MODE ? 'auto' : 'manual'}`}>
+                {EDGE_AUTO_MODE ? 'Auto' : 'Manual'}
+              </span>
+            </div>
             <div className="ct-grid">
               {EDGE_OPTIONS.map((opt) => (
                 <button

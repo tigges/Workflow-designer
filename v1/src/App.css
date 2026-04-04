@@ -577,11 +577,11 @@
 }
 
 .pal-card.data {
-  border-left: 4px solid #6c7c99;
+  border-left: 4px solid #d4720f;
 }
 
 .pal-card.annotation {
-  border-left: 4px solid #2f7af4;
+  border-left: 4px solid #6c7c99;
 }
 
 .shape-process {
@@ -590,8 +590,8 @@
 }
 
 .shape-decision {
-  border-color: var(--c-decision);
-  background: rgba(139, 69, 212, 0.07);
+  border-color: #f1bd3d;
+  background: rgba(241, 189, 61, 0.14);
   transform: rotate(45deg);
   width: 14px;
   height: 14px;
@@ -609,7 +609,7 @@
 }
 
 .shape-data {
-  border-color: var(--c-data);
+  border-color: #d4720f;
   background: rgba(212, 114, 15, 0.07);
   transform: skewX(-12deg);
   width: 24px;
@@ -619,7 +619,7 @@
 }
 
 .shape-annotation {
-  border-color: var(--c-annotation);
+  border-color: #8a94a6;
   border-style: dashed;
   background: #f8f9fb;
   width: 22px;
@@ -663,25 +663,25 @@
 
 .ct-btn.active[data-ct="sequential"] {
   border-color: #b0bac8;
-  background: #f4f5f7;
-  color: var(--text);
+  background: rgba(159, 169, 185, 0.1);
+  color: #66758f;
 }
 
 .ct-btn.active[data-ct="conditional"] {
-  border-color: var(--c-cond);
-  background: rgba(45, 110, 245, 0.07);
-  color: var(--c-cond);
+  border-color: #f1bd3d;
+  background: rgba(241, 189, 61, 0.15);
+  color: #ab7a00;
 }
 
 .ct-btn.active[data-ct="parallel"] {
-  border-color: var(--c-parallel);
-  background: rgba(15, 158, 110, 0.07);
-  color: var(--c-parallel);
+  border-color: #0f9e6e;
+  background: rgba(15, 158, 110, 0.1);
+  color: #0f9e6e;
 }
 
 .ct-btn.active[data-ct="fallback"] {
   border-color: var(--c-fallback);
-  background: rgba(224, 68, 58, 0.07);
+  background: rgba(224, 68, 58, 0.1);
   color: var(--c-fallback);
 }
 
@@ -808,9 +808,10 @@
   width: 120px;
   height: 80px;
   clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
-  border: 1.5px solid #ddd0f5;
+  border: 1.5px solid #f6dc8f;
   border-left-width: 1.5px;
   border-left-color: #f1bd3d;
+  background: #fffdf4;
 }
 
 .fnode-card.kind-terminal {
@@ -830,10 +831,10 @@
 }
 
 .fnode-card.kind-annotation {
-  border: 1px dashed #d4c87a;
-  border-left: 1px dashed #2f7af4;
+  border: 1px dashed #b5bccb;
+  border-left: 1px dashed #6c7c99;
   border-radius: 4px;
-  background: #fffef0;
+  background: #f8f9fb;
 }
 
 .fnode-card.kind-terminal.term-start {
@@ -925,20 +926,48 @@
 }
 
 .flow-handle {
-  width: 9px;
-  height: 9px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  border: 1.5px solid var(--border-hi);
+  border: 2px solid #9fb0cc;
   background: #fff;
-  opacity: 0;
+  opacity: 0.24;
+  transition: transform 0.12s ease, opacity 0.12s ease, border-color 0.12s ease;
 }
 
 .fnode-card:hover .flow-handle {
-  opacity: 1;
+  opacity: 0.9;
 }
 
 .react-flow__node.selected .flow-handle {
   opacity: 1;
+}
+
+.flow-handle:hover {
+  transform: scale(1.18);
+  opacity: 1;
+  border-color: #2d6ef5;
+}
+
+.flow-handle.connecting {
+  opacity: 1;
+  border-color: #2d6ef5;
+}
+
+.react-flow__edge.edge-sequential .react-flow__edge-path {
+  stroke-dasharray: 0;
+}
+
+.react-flow__edge.edge-conditional .react-flow__edge-path {
+  stroke-dasharray: 7 5;
+}
+
+.react-flow__edge.edge-parallel .react-flow__edge-path {
+  stroke-dasharray: 2 4;
+}
+
+.react-flow__edge.edge-fallback .react-flow__edge-path {
+  stroke-dasharray: 10 6;
 }
 
 .react-flow__edge-path {
