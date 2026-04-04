@@ -108,6 +108,148 @@ const QUICK_IMPORT_TEMPLATES = [
   },
 ] as const
 
+const GOLD_TOC_SEED_TEMPLATE = [
+  'Cluster: Core Concepts & Account Management',
+  'Cluster: User Data & Support Issues',
+  'Cluster: Payments & Deposits',
+  'Cluster: Withdrawals & Cashier',
+  'Cluster: Verification & Risk',
+  'Cluster: Bonuses & Gamification',
+  'Cluster: Sports Betting',
+  'Cluster: Account Status & Safety',
+].join('\n')
+
+const CHAPTER_WITHDRAWAL_RAW_TEMPLATE = [
+  '4.2 Processing a Withdrawal',
+  'Finance tab baseline: initiated withdrawal appears as Pending.',
+  'Statuses include Pending, Cancelled/Declined, Complete, and Awaiting (bug state requiring manual cancellation).',
+  'Cancellation paths: player self-cancel in Cashier while Pending; KYC cancellation for wrong details/verification failures; CS escalation to SM/support channel on request.',
+  'If first cancellation, advise resubmission with same method, Bank Transfer, or different method with minimum deposit + x1 wager.',
+  'If second/third cancellation, escalate to finance for manual KYC check and tell player to wait for email.',
+  'Processing SLA: finance handles within 3 business days, 10:00-18:00 (+2 GMT), excluding weekends.',
+  'Progression guidance: pending <=3 days (queue reassurance), pending >3 days (empathy + delay reassurance), complete 3-5 days (bank settlement notice), complete >5 days (request ARN via finance Slack).',
+  'ARN is provided to the player for bank tracking; agents cannot track it directly.',
+].join('\n')
+
+const CHAPTER_WITHDRAWAL_GOLD_TEMPLATE = [
+  'Start: Player submits withdrawal request.',
+  'Check withdrawal status in Finance tab.',
+  'Decision: Is status Pending and under 3 business days?',
+  'Inform player withdrawal is in queue and within normal processing time.',
+  'Decision: Is status Pending longer than 3 business days?',
+  'Acknowledge delay, reassure funds are safe, and apologize.',
+  'Decision: Is status Complete and fewer than 5 business days since payout?',
+  'Inform player funds were sent and bank settlement may take 3-5 business days.',
+  'Decision: Is status Complete and more than 5 business days since payout?',
+  'Escalate to finance for ARN request and tell player update will come by email.',
+  'Decision: Is status Awaiting?',
+  'Cancel manually and ask player to submit withdrawal again.',
+  'Decision: Is cancellation requested while status is Pending?',
+  'Guide self-cancel in Cashier; if impossible escalate to SM/support channel.',
+  'End: Withdrawal case resolved or escalated.',
+].join('\n')
+
+const CHAPTER_CASHBACK_RAW_TEMPLATE = [
+  '6.3 Cashback Weekly / Live Casino Cashback',
+  'Cashback is a real-balance cash bonus based on percentage of losses and subject to 1x wagering.',
+  'Types include Weekly cashback and Daily cashback (special VIP offer).',
+  'Weekly Casino cashback is based on slot losses, credited Monday, minimum 5 EUR, VIP levels 3/4/5 only.',
+  'VIP percentages: Gold 5%, Platinum 10%, Diamond 15%.',
+  'Weekly Live Casino cashback is 25%, based on Live Casino losses only, credited Monday, minimum 5 EUR, available to all account levels.',
+  'Agents must confirm which cashback promo the player means and check logs for auto-credit.',
+  'Automated weekly cashback may be credited at 07:00 CY/BG time; on NR1 players activate from Bonuses section.',
+  'Agents can advise players to OPT-IN weekly; opting in any day still applies for following Monday.',
+].join('\n')
+
+const CHAPTER_CASHBACK_GOLD_TEMPLATE = [
+  'Start: Player contacts support to claim cashback.',
+  'Confirm which cashback promotion the player is referring to.',
+  'Decision: Is this Weekly Casino cashback?',
+  'Check slot losses from prior week and minimum 5 EUR threshold.',
+  'Decision: Is player VIP level 3, 4, or 5?',
+  'Apply cashback percentage by level (Gold 5%, Platinum 10%, Diamond 15%).',
+  'Decision: Is this Weekly Live Casino cashback?',
+  'Check live casino losses only and apply 25% cashback if minimum threshold is met.',
+  'Check logs for automated cashback credit at 07:00 CY/BG.',
+  'If auto-credited, guide player to activate bonus from bonuses section.',
+  'Advise player to OPT-IN for weekly cashback going forward.',
+  'End: Cashback request resolved and player informed.',
+].join('\n')
+
+const CHAPTER_REOPENING_RAW_TEMPLATE = [
+  '8.1 Account Reopening',
+  'Players cannot reopen accounts themselves; requests come via chat/email and can be approved or denied.',
+  'Deny reasons include duplicate account, fraud, underage, GDPR, self-harm/complaints/care-listed.',
+  'Teams decide reopening path: casino escalates to support channel, sports escalates to sports channel.',
+  'Only SM can complete reopening for standard closure requests.',
+  'For denied requests, a mandatory log must state why denied.',
+  'After GA closure: ask responsible gambling confirmation question (T&C 4.1), escalate to SM, reopen after confirmation, send RG tools template.',
+  'If account is frozen after repeated failed logins, agent can reopen directly: status Open, reopen bonus program, save, leave log.',
+  'Offer password reset when player requests it.',
+].join('\n')
+
+const CHAPTER_REOPENING_GOLD_TEMPLATE = [
+  'Start: Player requests account reopening via chat or email.',
+  'Check closure reason in account logs.',
+  'Decision: Is closure reason in deny list (duplicate, fraud, underage, GDPR, self-harm/care)?',
+  'Deny reopening request and log explicit denial reason.',
+  'Decision: Is player casino or sports?',
+  'Escalate casino to support channel; escalate sports to sports channel.',
+  'Decision: Is request after GA closure?',
+  'Ask T&C 4.1 responsible-gambling confirmation question.',
+  'Escalate to SM for reopen decision.',
+  'If approved, SM reopens account and agent sends RG tools template.',
+  'Decision: Is account frozen due to failed login attempts?',
+  'Reopen directly by setting status Open, reopening bonus program, saving changes, and leaving a log.',
+  'Offer password reset if needed.',
+  'End: Account reopened or denied with documented reason.',
+].join('\n')
+
+const IMPORT_TEST_TEMPLATES = [
+  {
+    id: 'gold-toc-seed',
+    label: 'Gold TOC Seed',
+    mode: 'text' as const,
+    payload: GOLD_TOC_SEED_TEMPLATE,
+  },
+  {
+    id: 'wd-4-2-raw',
+    label: '4.2 WD Raw',
+    mode: 'ai' as const,
+    payload: CHAPTER_WITHDRAWAL_RAW_TEMPLATE,
+  },
+  {
+    id: 'wd-4-2-gold',
+    label: '4.2 WD Gold',
+    mode: 'text' as const,
+    payload: CHAPTER_WITHDRAWAL_GOLD_TEMPLATE,
+  },
+  {
+    id: 'cb-6-3-raw',
+    label: '6.3 CB Raw',
+    mode: 'ai' as const,
+    payload: CHAPTER_CASHBACK_RAW_TEMPLATE,
+  },
+  {
+    id: 'cb-6-3-gold',
+    label: '6.3 CB Gold',
+    mode: 'text' as const,
+    payload: CHAPTER_CASHBACK_GOLD_TEMPLATE,
+  },
+  {
+    id: 'ar-8-1-raw',
+    label: '8.1 AR Raw',
+    mode: 'ai' as const,
+    payload: CHAPTER_REOPENING_RAW_TEMPLATE,
+  },
+  {
+    id: 'ar-8-1-gold',
+    label: '8.1 AR Gold',
+    mode: 'text' as const,
+    payload: CHAPTER_REOPENING_GOLD_TEMPLATE,
+  },
+] as const
+
 const BLANK_TEMPLATE_DESCRIPTION =
   'Blank template: start from an empty map and describe your process goals, actors, and expected outcomes.'
 
@@ -1169,6 +1311,33 @@ export default function App() {
     setHeaderNotice(result.ok ? `${label} template loaded. ${result.message}` : result.message)
   }
 
+  function handleApplyImportTestTemplate(
+    template: (typeof IMPORT_TEST_TEMPLATES)[number],
+  ) {
+    if (!selectedVersion) {
+      setHeaderNotice('Select or create a version before loading import test templates.')
+      return
+    }
+    setAiPrompt(template.payload)
+    setTab('import_map')
+    if (template.id === 'gold-toc-seed') {
+      setImportStage('toc_seed')
+    }
+    if (template.mode === 'text') {
+      const result = importFromText(template.payload)
+      if (result.ok && (importStage === 'toc_seed' || importStage === 'confirmed')) {
+        setImportStage(template.id === 'gold-toc-seed' ? 'detail_ingest' : 'detail_ingest')
+      }
+      setHeaderNotice(result.ok ? `${template.label} loaded. ${result.message}` : result.message)
+      return
+    }
+    const result = importFromAiAssist(template.payload)
+    if (result.ok && (importStage === 'toc_seed' || importStage === 'confirmed')) {
+      setImportStage('detail_ingest')
+    }
+    setHeaderNotice(result.ok ? `${template.label} loaded. ${result.message}` : result.message)
+  }
+
   function handleTemplateTabSelect(tab: (typeof TEMPLATE_TABS)[number]) {
     setActiveTemplate(tab)
     if (tab === 'Blank') {
@@ -1994,6 +2163,22 @@ export default function App() {
                     applyQuickImportTemplate(template.lines, template.label, template.description)
                   }}
                   disabled={!selectedVersion}
+                >
+                  {template.label}
+                </button>
+              ))}
+              {IMPORT_TEST_TEMPLATES.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  className={`sti-pill ${template.id === 'gold-toc-seed' ? 'qa' : ''}`}
+                  onClick={() => handleApplyImportTestTemplate(template)}
+                  disabled={!selectedVersion}
+                  title={
+                    template.id === 'gold-toc-seed'
+                      ? 'Seed Step 1 clusters from full gold TOC'
+                      : 'Load extracted chapter text for import testing'
+                  }
                 >
                   {template.label}
                 </button>
