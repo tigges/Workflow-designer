@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Workflow Designer MVP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="logo">
+        <div class="logo-mark">
+          <svg viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path
+              d="M2 6h8M6 2v8M2 2l8 8"
+              stroke="#fff"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+        Workflow Designer
+      </div>
+
+      <label class="visually-hidden" for="flowTitle">Flow title</label>
+      <input class="flow-title" id="flowTitle" value="Customer Support Journey" />
+
+      <div class="header-sep"></div>
+
+      <nav class="header-tabs" aria-label="Templates">
+        <button class="htab active" data-template="support">Support</button>
+        <button class="htab" data-template="onboarding">Onboarding</button>
+        <button class="htab" data-template="sales">Sales</button>
+        <button class="htab" data-template="blank">Blank</button>
+      </nav>
+
+      <div class="header-right">
+        <button class="btn" id="validateBtn">Validate</button>
+        <button class="btn" id="exportJsonBtn">Export JSON</button>
+        <button class="btn primary" id="exportSvgBtn">Export SVG</button>
+        <label class="btn import-btn">
+          Import JSON
+          <input type="file" id="importInput" accept="application/json" />
+        </label>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="sidebar">
+        <section class="ai-panel">
+          <div class="ai-panel-header">
+            <div class="ai-badge"><div class="ai-badge-dot"></div>AI Assist</div>
+          </div>
+          <div class="ai-chips">
+            <button class="ai-chip" data-prompt="Customer refund request flow">Refund</button>
+            <button class="ai-chip" data-prompt="User login and authentication flow">Auth</button>
+            <button class="ai-chip" data-prompt="Order fulfilment process">Fulfilment</button>
+            <button class="ai-chip" data-prompt="Employee onboarding process">HR</button>
+            <button class="ai-chip" data-prompt="Incident escalation and resolution flow">Escalation</button>
+            <button class="ai-chip" data-prompt="Content approval workflow">Approval</button>
+          </div>
+          <div class="ai-prompt-wrap">
+            <label class="visually-hidden" for="aiPrompt">AI prompt</label>
+            <textarea
+              class="ai-prompt"
+              id="aiPrompt"
+              placeholder="Describe a process to map (Enter to generate, Shift+Enter for newline)"
+            ></textarea>
+            <button class="ai-send" id="aiSendBtn" title="Generate flow">
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                <path
+                  d="M1 5.5h9M6.5 1.5l4 4-4 4"
+                  stroke="#fff"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
+          <div class="ai-status" id="aiStatus">
+            <div class="ai-spinner" id="aiSpinner"></div>
+            <span id="aiStatusText">Local AI fallback enabled (no key required)</span>
+          </div>
+        </section>
+
+        <section class="sb-sec">
+          <div class="sb-label">Node Types</div>
+          <div class="pal-card" data-type="process" draggable="true">
+            <div class="pal-shape"><div class="sh-rect"></div></div>
+            <div class="pal-info"><div class="pal-name">Process</div><div class="pal-desc">Action step</div></div>
+          </div>
+          <div class="pal-card" data-type="decision" draggable="true">
+            <div class="pal-shape"><div class="sh-diam"></div></div>
+            <div class="pal-info"><div class="pal-name">Decision</div><div class="pal-desc">Branch logic</div></div>
+          </div>
+          <div class="pal-card" data-type="terminal" draggable="true">
+            <div class="pal-shape"><div class="sh-pill"></div></div>
+            <div class="pal-info"><div class="pal-name">Terminal</div><div class="pal-desc">Start/end point</div></div>
+          </div>
+          <div class="pal-card" data-type="data" draggable="true">
+            <div class="pal-shape"><div class="sh-para"></div></div>
+            <div class="pal-info"><div class="pal-name">Data / System</div><div class="pal-desc">Integrations</div></div>
+          </div>
+          <div class="pal-card" data-type="annotation" draggable="true">
+            <div class="pal-shape"><div class="sh-note"></div></div>
+            <div class="pal-info"><div class="pal-name">Annotation</div><div class="pal-desc">Context note</div></div>
+          </div>
+        </section>
+
+        <section class="sb-sec">
+          <div class="sb-label">Connection Type</div>
+          <div class="ct-grid">
+            <button class="ct-btn active" data-ct="sequential">Sequential</button>
+            <button class="ct-btn" data-ct="conditional">Conditional</button>
+            <button class="ct-btn" data-ct="parallel">Parallel</button>
+            <button class="ct-btn" data-ct="fallback">Fallback</button>
+          </div>
+        </section>
+
+        <section class="sb-sec">
+          <div class="sb-label">Validation</div>
+          <div class="val-list" id="valList">
+            <div class="val-row ok"><span class="val-icon">OK</span>Canvas ready</div>
+          </div>
+        </section>
+      </aside>
+
+      <section
+        class="canvas-wrap"
+        id="canvasWrap"
+        ondragover="event.preventDefault()"
+      >
+        <svg id="svg-layer" aria-hidden="true">
+          <defs>
+            <marker id="mk-seq" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+              <path d="M0,0 L0,7 L7,3.5z" fill="#c1c8d4" />
+            </marker>
+            <marker id="mk-cond" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+              <path d="M0,0 L0,7 L7,3.5z" fill="#2d6ef5" />
+            </marker>
+            <marker id="mk-par" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+              <path d="M0,0 L0,7 L7,3.5z" fill="#0f9e6e" />
+            </marker>
+            <marker id="mk-fall" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+              <path d="M0,0 L0,7 L7,3.5z" fill="#e0443a" />
+            </marker>
+          </defs>
+          <path id="ghost-line" d="" />
+        </svg>
+
+        <div class="canvas-nodes" id="canvasNodes"></div>
+        <div class="minimap" id="minimap"></div>
+
+        <div class="canvas-toolbar">
+          <button class="tb-btn active" id="tbSel" title="Select (V)">V</button>
+          <button class="tb-btn" id="tbConn" title="Connect (C)">C</button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn" id="undoBtn" title="Undo (Ctrl/Cmd+Z)">U</button>
+          <button class="tb-btn" id="deleteBtn" title="Delete (Del)">X</button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn" id="clearBtn" title="Clear canvas">C</button>
+        </div>
+      </section>
+
+      <aside class="props-panel">
+        <div class="props-empty" id="propsEmpty">
+          Select a node or connection to edit properties
+        </div>
+
+        <div id="nodeProps" class="hidden">
+          <div class="props-hdr">
+            <span class="type-pill" id="typePill"></span>
+            <span class="nid" id="nodeId"></span>
+          </div>
+          <div class="prop-sec">
+            <div class="psec-label">Label</div>
+            <input class="pf" id="pLabel" placeholder="Verb-led label..." />
+          </div>
+          <div class="prop-sec">
+            <div class="psec-label">Actor / Owner</div>
+            <select class="pf" id="pActor">
+              <option value="">- Unassigned -</option>
+              <option value="customer">Customer</option>
+              <option value="agent">Agent</option>
+              <option value="system">System</option>
+              <option value="manager">Manager</option>
+              <option value="external">External</option>
+            </select>
+          </div>
+          <div class="prop-sec">
+            <div class="psec-label">Status</div>
+            <div class="status-pills">
+              <button class="spill" id="sp-live" data-status="live">Live</button>
+              <button class="spill" id="sp-planned" data-status="planned">Planned</button>
+              <button class="spill" id="sp-deprecated" data-status="deprecated">Depr.</button>
+            </div>
+          </div>
+          <div class="prop-sec">
+            <div class="psec-label">Metrics</div>
+            <div class="pf-row">
+              <input class="pf" id="pAHT" placeholder="Time (min)" />
+              <input class="pf" id="pVol" placeholder="Volume" />
+            </div>
+            <input class="pf" id="pSLA" placeholder="SLA / deadline" />
+          </div>
+          <div class="prop-sec">
+            <div class="psec-label">System / Integration</div>
+            <input class="pf" id="pSystem" placeholder="e.g. CRM, Stripe, Zendesk" />
+          </div>
+          <div class="prop-sec">
+            <div class="psec-label">Notes</div>
+            <textarea class="pf" id="pNotes" placeholder="Conditions, edge cases, SLA..."></textarea>
+          </div>
+          <div class="prop-sec">
+            <button class="btn danger full" id="deleteNodeBtn">Delete Node</button>
+          </div>
+        </div>
+
+        <div id="connProps" class="hidden">
+          <div class="props-hdr">
+            <span class="type-pill tp-connection">CONNECTION</span>
+            <span class="nid" id="connId"></span>
+          </div>
+          <div class="prop-sec">
+            <div class="psec-label">Type</div>
+            <select class="pf" id="cType">
+              <option value="sequential">Sequential</option>
+              <option value="conditional">Conditional</option>
+              <option value="parallel">Parallel</option>
+              <option value="fallback">Fallback / Error</option>
+            </select>
+          </div>
+          <div class="prop-sec condlbl" id="condLblSec">
+            <div class="psec-label">Branch Label</div>
+            <input class="pf" id="cLabel" placeholder="e.g. Yes / No / Approved" />
+          </div>
+          <div class="prop-sec">
+            <button class="btn danger full" id="deleteConnBtn">Delete Connection</button>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="statusbar">
+      <span class="sb-val" id="sbNodes">0 nodes</span>
+      <span class="sb-sep">|</span>
+      <span id="sbConns">0 connections</span>
+      <span class="sb-sep">|</span>
+      <span id="sbMode">select</span>
+      <span id="sbHint">Drag nodes to canvas - connect with ports - edit in right panel</span>
+    </footer>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
