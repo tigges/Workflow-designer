@@ -187,7 +187,7 @@ function normalizeStructuredPayload(
   }
 
   const rawSections = Array.isArray(parsed.sections) ? parsed.sections : []
-  const normalizedSections: GeminiStructuredSection[] = rawSections
+  const normalizedSections = rawSections
     .map((section) => {
       if (!section || typeof section !== 'object') return null
       const item = section as Record<string, unknown>
@@ -213,7 +213,7 @@ function normalizeStructuredPayload(
         })
         .filter((step): step is GeminiStructuredStep => step !== null)
       if (steps.length === 0) return null
-      return { title, clusterHint, steps }
+      return clusterHint ? { title, clusterHint, steps } : { title, steps }
     })
     .filter((section): section is GeminiStructuredSection => section !== null)
 
