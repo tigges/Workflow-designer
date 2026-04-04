@@ -1099,7 +1099,7 @@ export default function App() {
         </aside>
 
         <section className="canvas-panel">
-          <div className="canvas-top canvas-top-floating">
+          <div className="canvas-top">
             <button
               type="button"
               className={`tab-btn ${selectedTab === 'flow' ? 'active' : ''}`}

@@ -918,20 +918,13 @@
 }
 
 .canvas-top {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 44px;
-  z-index: 55;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border: 1px solid #d8deea;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: var(--shadow-md);
-  backdrop-filter: blur(4px);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  z-index: 5;
 }
 
 .tab-btn {
@@ -962,7 +955,7 @@
   min-height: 0;
   position: relative;
   background: var(--canvas-bg);
-  padding-bottom: 88px;
+  padding-bottom: 30px;
 }
 
 .flow-empty-hint {
@@ -1441,7 +1434,7 @@
 
 .canvas-wrap .react-flow__controls {
   position: fixed;
-  right: 16px;
+  right: 272px;
   bottom: 44px;
   z-index: 55;
   box-shadow: var(--shadow-md);
@@ -1451,7 +1444,7 @@
 
 .canvas-wrap .react-flow__minimap {
   position: fixed;
-  right: 16px;
+  right: 272px;
   bottom: 130px;
   z-index: 55;
   width: 168px;
@@ -1498,12 +1491,7 @@
   }
 
   .canvas-top {
-    left: 10px;
-    right: 10px;
-    transform: none;
-    justify-content: center;
-    width: auto;
-    padding: 7px 8px;
+    justify-content: flex-start;
   }
 
   .canvas-wrap .react-flow__controls {
