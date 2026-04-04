@@ -146,7 +146,7 @@ const FEATURE_AVAILABILITY = {
 } as const
 
 const PREP_FEATURE_FLAGS = {
-  importMapClustersLayer: false,
+  importMapClustersLayer: true,
 } as const
 
 type EdgeMode = 'auto' | 'manual'
