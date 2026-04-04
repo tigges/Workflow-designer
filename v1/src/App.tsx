@@ -682,17 +682,12 @@ export default function App() {
       stageBuckets.set(stage, bucket)
     })
 
-    const clusterOrder =
-      seededClusterLabels.length > 0
-        ? [...seededClusterLabels]
-        : [...stageBuckets.keys()]
-
+    const clusterOrder = seededClusterLabels.length > 0 ? [...seededClusterLabels] : [...stageBuckets.keys()]
     const missingAssignedClusters = [...stageBuckets.keys()].filter(
       (stage) => !clusterOrder.some((label) => label.toLowerCase() === stage.toLowerCase()),
     )
     const allClusters = [...clusterOrder, ...missingAssignedClusters]
-
-    return allClusters.map((name, index) => {
+    const entries = allClusters.map((name, index) => {
       const mappedSteps = stageBuckets.get(name) ?? []
       const preview = mappedSteps.slice(0, 2).map((node) => node.label)
       const extra = mappedSteps.length - preview.length
@@ -701,12 +696,21 @@ export default function App() {
         name,
         count: mappedSteps.length,
         isEmpty: mappedSteps.length === 0,
+        order: index,
         summary:
           mappedSteps.length === 0
             ? 'Cluster seeded. Waiting for detailed step allocation.'
             : `${preview.join(' -> ')}${extra > 0 ? ` +${extra} more` : ''}`,
       }
     })
+
+    entries.sort((a, b) => {
+      if (a.isEmpty !== b.isEmpty) return a.isEmpty ? 1 : -1
+      if (!a.isEmpty && a.count !== b.count) return b.count - a.count
+      return a.order - b.order
+    })
+
+    return entries
   }, [currentModel])
 
   function handleCreateProject() {
