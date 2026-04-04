@@ -2,6 +2,10 @@
 
 A lightweight browser-based MVP for business process workflow design, mapping, visualization, and editing.
 
+## Specifications
+
+- [Intelligent Automated Document Import and Journey Flow Conversion Spec](./INTELLIGENT_IMPORT_FLOW_SPEC.md)
+
 This implementation is inspired by your FlowCraft concept and includes:
 
 - Drag-and-drop node palette (process, decision, terminal, data/system, annotation)
