@@ -36,12 +36,14 @@ import {
 } from './exportUtils'
 import type {
   Actor,
+  CanonicalModel,
   EdgeType,
   ExportFormat,
   FlowEdge,
   FlowNode,
   ReviewState,
 } from './types'
+import { GOLD_IMPORT_FIXTURES, evaluateImportQuality, type GoldImportFixture, type ImportEvalMetrics } from './evals'
 
 type RFNodeData = {
   label: string
@@ -148,6 +150,8 @@ const FEATURE_AVAILABILITY = {
 const PREP_FEATURE_FLAGS = {
   importMapClustersLayer: true,
 } as const
+
+const IMPORT_QA_PRESETS_ENABLED = true
 
 type EdgeMode = 'auto' | 'manual'
 type CanvasTool = 'select' | 'connect'
@@ -459,6 +463,7 @@ export default function App() {
     selectNode,
     selectEdge,
     undoCurrentVersion,
+    getCurrentModel,
   } = usePMStore()
 
   const [activeTemplate, setActiveTemplate] = useState<(typeof TEMPLATE_TABS)[number]>('Support')
@@ -467,6 +472,7 @@ export default function App() {
   const [canvasTool, setCanvasTool] = useState<CanvasTool>('select')
   const [draftSourceType, setDraftSourceType] = useState<DraftSourceType>('text')
   const [importBusy, setImportBusy] = useState(false)
+  const [qaBusy, setQaBusy] = useState(false)
   const [exportBusy, setExportBusy] = useState(false)
   const [importMenuOpen, setImportMenuOpen] = useState(false)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
@@ -1217,6 +1223,76 @@ export default function App() {
   const aiSidebarExpanded = aiAssistExpanded && sidebarVisible
   const workspaceClasses = `workspace ${!sidebarVisible ? 'sidebar-hidden' : ''} ${!inspectorVisible ? 'inspector-hidden' : ''} ${aiSidebarExpanded ? 'ai-expanded-horizontal' : ''}`
 
+  function runGoldImportFixture(fixture: GoldImportFixture): {
+    metrics: ImportEvalMetrics
+    model: CanonicalModel
+  } | null {
+    const clearResult = clearCurrentVersion()
+    if (!clearResult.ok) {
+      setHeaderNotice(clearResult.message)
+      return null
+    }
+    importFromText(fixture.tocInput)
+    importFromAiAssist(fixture.chapterInput)
+    const model = getCurrentModel()
+    if (!model) {
+      setHeaderNotice('Gold fixture run failed: no model returned.')
+      return null
+    }
+    const metrics = evaluateImportQuality(fixture, model)
+    return { metrics, model }
+  }
+
+  async function handleRunGoldImportSuite() {
+    if (!selectedVersion || qaBusy) return
+    setQaBusy(true)
+    try {
+      const summaries: string[] = []
+      let aggregateScore = 0
+      let aggregateCount = 0
+      for (const fixture of GOLD_IMPORT_FIXTURES) {
+        const result = runGoldImportFixture(fixture)
+        if (!result) continue
+        const { metrics } = result
+        summaries.push(
+          `${fixture.id}: clusterR ${metrics.clusterRecall.toFixed(2)} · stepR ${metrics.stepExtractionRecall.toFixed(2)} · assign ${metrics.assignmentAccuracy.toFixed(2)} · decisionF1 ${metrics.decisionF1.toFixed(2)} · unassigned ${metrics.unassignedRate.toFixed(2)} · explosion ${metrics.nodeExplosionRate.toFixed(2)}`,
+        )
+        aggregateScore +=
+          metrics.clusterRecall +
+          metrics.stepExtractionRecall +
+          metrics.assignmentAccuracy +
+          metrics.decisionF1
+        aggregateCount += 4
+      }
+      const average = aggregateCount > 0 ? aggregateScore / aggregateCount : 0
+      setHeaderNotice(
+        summaries.length === 0
+          ? 'Gold suite did not run. Select a version first.'
+          : `Gold suite complete (${summaries.length} fixtures). Composite quality ${(average * 100).toFixed(1)}%. ${summaries[0]}`,
+      )
+    } finally {
+      setQaBusy(false)
+    }
+  }
+
+  function handleApplyGoldFixture(fixture: GoldImportFixture) {
+    if (!selectedVersion || qaBusy) return
+    setQaBusy(true)
+    try {
+      setAiPrompt(fixture.chapterInput)
+      const result = runGoldImportFixture(fixture)
+      if (!result) return
+      const { metrics } = result
+      setTab('import_map')
+      setImportStage('review')
+      setHeaderNotice(
+        `${fixture.label} loaded. clusterR ${metrics.clusterRecall.toFixed(2)} · stepR ${metrics.stepExtractionRecall.toFixed(2)} · assign ${metrics.assignmentAccuracy.toFixed(2)} · decisionF1 ${metrics.decisionF1.toFixed(2)} · unassigned ${metrics.unassignedRate.toFixed(2)} · explosion ${metrics.nodeExplosionRate.toFixed(2)}.`,
+      )
+    } finally {
+      setQaBusy(false)
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -1633,6 +1709,31 @@ export default function App() {
               >
                 Clear
               </button>
+              {IMPORT_QA_PRESETS_ENABLED && (
+                <>
+                  {GOLD_IMPORT_FIXTURES.map((fixture) => (
+                    <button
+                      key={fixture.id}
+                      type="button"
+                      className="sti-pill qa"
+                      onClick={() => handleApplyGoldFixture(fixture)}
+                      disabled={!selectedVersion || qaBusy}
+                      title={`Run ${fixture.label}`}
+                    >
+                      {fixture.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="sti-pill qa-suite"
+                    onClick={handleRunGoldImportSuite}
+                    disabled={!selectedVersion || qaBusy}
+                    title="Run all gold import fixtures"
+                  >
+                    {qaBusy ? 'Running QA…' : 'Run Gold Suite'}
+                  </button>
+                </>
+              )}
             </div>
             <button
               type="button"

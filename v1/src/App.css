@@ -416,6 +416,28 @@
   background: #ffeae8;
 }
 
+.sti-pill.qa {
+  border-color: #c8d8f9;
+  background: #f5f8ff;
+  color: #355ebd;
+}
+
+.sti-pill.qa:hover:not(:disabled) {
+  border-color: #9eb9f3;
+  background: #ebf2ff;
+}
+
+.sti-pill.qa-suite {
+  border-color: #c9e6d8;
+  background: #f2fbf6;
+  color: #1f8e5f;
+}
+
+.sti-pill.qa-suite:hover:not(:disabled) {
+  border-color: #9fd7bb;
+  background: #e7f7ef;
+}
+
 .import-map-badge {
   display: inline-flex;
   align-items: center;
