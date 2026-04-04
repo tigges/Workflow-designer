@@ -55,7 +55,10 @@ const TEMPLATE_TABS = ['Support', 'Onboarding', 'Sales', 'Blank'] as const
 const QUICK_IMPORT_TEMPLATES = [
   {
     id: 'support',
+    tab: 'Support',
     label: 'Support Ticket',
+    description:
+      'Support template: triage incoming tickets, decide if issue category is known, resolve with knowledge base when possible, and escalate specialist cases before closure.',
     lines: [
       'Start: Customer submits ticket',
       'Triage request',
@@ -67,7 +70,10 @@ const QUICK_IMPORT_TEMPLATES = [
   },
   {
     id: 'onboarding',
+    tab: 'Onboarding',
     label: 'Customer Onboarding',
+    description:
+      'Onboarding template: capture setup requirements, provision account access, validate readiness, and complete enablement before go-live.',
     lines: [
       'Start: Customer signs agreement',
       'Collect setup requirements',
@@ -79,7 +85,10 @@ const QUICK_IMPORT_TEMPLATES = [
   },
   {
     id: 'sales',
+    tab: 'Sales',
     label: 'Sales Opportunity',
+    description:
+      'Sales template: qualify lead potential, confirm prospect fit, run discovery, and progress to proposal through close.',
     lines: [
       'Start: Lead created',
       'Qualify opportunity',
@@ -90,6 +99,9 @@ const QUICK_IMPORT_TEMPLATES = [
     ],
   },
 ] as const
+
+const BLANK_TEMPLATE_DESCRIPTION =
+  'Blank template: start from an empty map and describe your process goals, actors, and expected outcomes.'
 
 const AI_PLACEHOLDER =
   'Type draft text (notes or extract). Use → to generate, or top-right Import draft to apply adapters.'
@@ -205,7 +217,7 @@ function inferEdgeType(
 }
 
 function isFlowCanvasTab(tab: 'flow' | 'import_map' | 'map') {
-  return tab === 'flow' || tab === 'import_map'
+  return tab === 'flow'
 }
 
 function FlowNodeView({ data }: NodeProps<Node<RFNodeData>>) {
@@ -376,6 +388,7 @@ export default function App() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [headerNotice, setHeaderNotice] = useState('')
+  const [aiAssistExpanded, setAiAssistExpanded] = useState(false)
   const [sidebarVisible, setSidebarVisible] = useState(() =>
     readStoredBool(UI_STORAGE_KEYS.sidebarVisible, true),
   )
@@ -831,15 +844,28 @@ export default function App() {
     if (result.ok) setAiPrompt('')
   }
 
-  function applyQuickImportTemplate(lines: readonly string[], label: string) {
+  function applyTemplateDescription(description: string) {
+    setAiPrompt(description)
+    setAiAssistExpanded(true)
+    setSidebarVisible(true)
+  }
+
+  function applyQuickImportTemplate(lines: readonly string[], label: string, description: string) {
     const payload = lines.join('\n')
     const result = importFromText(payload)
+    applyTemplateDescription(description)
     setHeaderNotice(result.ok ? `${label} template loaded. ${result.message}` : result.message)
     if (result.ok) setTab('import_map')
   }
 
   function handleTemplateTabSelect(tab: (typeof TEMPLATE_TABS)[number]) {
     setActiveTemplate(tab)
+    if (tab === 'Blank') {
+      applyTemplateDescription(BLANK_TEMPLATE_DESCRIPTION)
+    } else {
+      const preset = QUICK_IMPORT_TEMPLATES.find((candidate) => candidate.id === tab.toLowerCase())
+      if (preset) applyTemplateDescription(preset.description)
+    }
     if (!selectedVersion) {
       setHeaderNotice('Select or create a version before loading templates.')
       return
@@ -854,7 +880,7 @@ export default function App() {
       setHeaderNotice(`No preset found for ${tab}.`)
       return
     }
-    applyQuickImportTemplate(preset.lines, preset.label)
+    applyQuickImportTemplate(preset.lines, preset.label, preset.description)
   }
 
   function handleImportDraftBySelectedSource() {
@@ -923,8 +949,18 @@ export default function App() {
 
   function selectedTabLabel() {
     if (selectedTab === 'import_map') return 'import map'
+    if (selectedTab === 'map') return 'process map'
+    if (selectedTab === 'flow') return 'journey flow'
     return selectedTab
   }
+
+  const isMapProjectionTab = selectedTab === 'map' || selectedTab === 'import_map'
+  const mapPanelHeading = selectedTab === 'import_map' ? 'Import Map Projection' : 'Process Map Projection'
+  const mapPanelHint =
+    selectedTab === 'import_map'
+      ? 'Chapter guide while refining imported content, then actor layers.'
+      : 'Chapter guide across the full map, then actor layers.'
+  const workspaceClasses = `workspace ${!sidebarVisible && !aiAssistExpanded ? 'sidebar-hidden' : ''} ${!inspectorVisible && !aiAssistExpanded ? 'inspector-hidden' : ''} ${aiAssistExpanded ? 'ai-expanded' : ''}`
 
   return (
     <div className="app-shell">
@@ -1030,21 +1066,27 @@ export default function App() {
         </div>
       </header>
 
-      <main
-        className={`workspace ${!sidebarVisible ? 'sidebar-hidden' : ''} ${inspectorVisible ? '' : 'inspector-hidden'}`}
-      >
-        <aside className={`sidebar ${!sidebarVisible ? 'hidden' : ''}`}>
+      <main className={workspaceClasses}>
+        <aside className={`sidebar ${!sidebarVisible && !aiAssistExpanded ? 'hidden' : ''} ${aiAssistExpanded ? 'expanded' : ''}`}>
           <section className={`ai-panel ai-top ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-section' : ''}`}>
             <div className="ai-panel-header">
               <div className="ai-badge">
                 <span className="ai-badge-dot" />
                 AI Assist
               </div>
+              <button
+                type="button"
+                className={`tiny-btn ai-expand-btn ${aiAssistExpanded ? 'active' : ''}`}
+                onClick={() => setAiAssistExpanded((current) => !current)}
+                aria-pressed={aiAssistExpanded}
+              >
+                {aiAssistExpanded ? 'Collapse' : 'Expand'}
+              </button>
               {!FEATURE_AVAILABILITY.aiAssist && <span className="preview-pill">Preview</span>}
             </div>
             <div className="ai-prompt-wrap">
               <textarea
-                className={`ai-prompt ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
+                className={`ai-prompt ${aiAssistExpanded ? 'expanded' : ''} ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
                 value={aiPrompt}
                 onChange={(event) => setAiPrompt(event.target.value)}
                 readOnly={!FEATURE_AVAILABILITY.aiAssist}
@@ -1070,6 +1112,8 @@ export default function App() {
             </div>
           </section>
 
+          {!aiAssistExpanded && (
+            <>
           <section className="sb-sec build-sec">
             <div className="sb-row">
               <div className="sb-label">Build</div>
@@ -1275,6 +1319,8 @@ export default function App() {
             </button>
             {previewOpen && <div />}
           </section>
+            </>
+          )}
         </aside>
 
         <section className="canvas-panel">
@@ -1285,7 +1331,10 @@ export default function App() {
                   key={template.id}
                   type="button"
                   className="sti-pill"
-                  onClick={() => applyQuickImportTemplate(template.lines, template.label)}
+                  onClick={() => {
+                    setActiveTemplate(template.tab)
+                    applyQuickImportTemplate(template.lines, template.label, template.description)
+                  }}
                   disabled={!selectedVersion}
                 >
                   {template.label}
@@ -1304,7 +1353,7 @@ export default function App() {
               className={`tab-btn ${selectedTab === 'map' ? 'active' : ''}`}
               onClick={() => setTab('map')}
             >
-              Journey Map
+              Process Map
             </button>
             <button
               type="button"
@@ -1353,7 +1402,7 @@ export default function App() {
             onDragOver={handleCanvasDragOver}
             onDrop={handleCanvasDrop}
           >
-            {(selectedTab === 'flow' || selectedTab === 'import_map') && (
+            {selectedTab === 'flow' && (
               <div className="flow-empty-hint">
                 <strong>How to build</strong>
                 <span>1) Add nodes from Build panel (click or drag/drop).</span>
@@ -1361,7 +1410,7 @@ export default function App() {
                 <span>3) Select any node/edge to edit in Inspector.</span>
               </div>
             )}
-            {selectedTab === 'flow' || selectedTab === 'import_map' ? (
+            {selectedTab === 'flow' ? (
               selectedVersion ? (
                 <ReactFlow
                   nodes={rfNodes}
@@ -1399,11 +1448,11 @@ export default function App() {
                   <p>Select or create an artifact/version to begin.</p>
                 </div>
               )
-            ) : selectedVersion ? (
+            ) : isMapProjectionTab && selectedVersion ? (
               <div className="map-view">
                 <div className="map-header">
-                  <h3>Journey Map Projection</h3>
-                  <p>Chapter guide across the full map, then actor layers.</p>
+                  <h3>{mapPanelHeading}</h3>
+                  <p>{mapPanelHint}</p>
                 </div>
 
                 <section className="map-phase-guide">
@@ -1452,10 +1501,10 @@ export default function App() {
             ) : (
               <div className="canvas-empty">
                 <h3>No version selected</h3>
-                <p>Select or create an artifact/version to view the Journey Map.</p>
+                <p>Select or create an artifact/version to view the Process Map.</p>
               </div>
             )}
-            {(selectedTab === 'flow' || selectedTab === 'import_map') && selectedVersion && (
+            {selectedTab === 'flow' && selectedVersion && (
               <div className="canvas-context-toolbar" role="toolbar" aria-label="Canvas context actions">
                 <button
                   type="button"
