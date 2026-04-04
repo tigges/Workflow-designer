@@ -785,6 +785,20 @@
   margin-top: 8px;
 }
 
+.ai-import-mode-hint {
+  margin-top: 7px;
+  font-size: 10px;
+  color: #5f6f88;
+  border: 1px solid #d5deef;
+  background: #f6f9ff;
+  border-radius: 6px;
+  padding: 5px 7px;
+}
+
+.ai-import-mode-hint strong {
+  color: #2d6ef5;
+}
+
 .ai-expand-btn {
   margin-left: auto;
 }

@@ -1074,6 +1074,24 @@ export default function App() {
     selectedTab === 'import_map'
       ? 'Chapter guide while refining imported content, then actor layers.'
       : 'Chapter guide across the full map, then actor layers.'
+  const aiPromptLines = useMemo(
+    () =>
+      aiPrompt
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean),
+    [aiPrompt],
+  )
+  const clusterLineCount = useMemo(
+    () => aiPromptLines.filter((line) => /^cluster\s*:/i.test(line)).length,
+    [aiPromptLines],
+  )
+  const tocSeedDetected = clusterLineCount >= 2 || (clusterLineCount === 1 && importStage === 'toc_seed')
+  const aiImportHint = aiPromptLines.length === 0
+    ? 'Awaiting input. Add "Cluster:" lines for TOC seeding or process text for detail import.'
+    : tocSeedDetected
+      ? 'Detected TOC seed mode. Cluster lines will seed import map buckets.'
+      : 'Detected detail import mode. Text will generate candidate process steps.'
   const importStageIndex = IMPORT_STAGE_STEPS.findIndex((step) => step.id === importStage)
   const importStageActionLabel =
     importStage === 'toc_seed'
@@ -1262,6 +1280,7 @@ export default function App() {
                 →
               </button>
             </div>
+            <div className="ai-import-hint">{aiImportHint}</div>
           </section>
 
           {!aiSidebarExpanded && (
