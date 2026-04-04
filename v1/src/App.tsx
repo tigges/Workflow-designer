@@ -238,7 +238,7 @@ function terminalRole(node: FlowNode): 'start' | 'end' | null {
   return null
 }
 
-function splitNodeCopy(label: string): { title: string; note: string } {
+function splitLegacyNodeCopy(label: string): { title: string; note: string } {
   const normalized = label.trim()
   if (!normalized) return { title: 'Untitled step', note: '' }
 
@@ -253,7 +253,7 @@ function splitNodeCopy(label: string): { title: string; note: string } {
     }
   }
 
-  const byDelimiter = normalized.match(/^(.{10,90}?)(?:\s*[;:]\s+|\s+[-–—]\s+)(.+)$/)
+  const byDelimiter = normalized.match(/^(.{10,90}?)(?:\s*;\s+|\s+[-–—]\s+)(.+)$/)
   if (byDelimiter) {
     return {
       title: byDelimiter[1].trim(),
@@ -270,6 +270,13 @@ function splitNodeCopy(label: string): { title: string; note: string } {
     title: normalized.slice(0, splitIndex).trim(),
     note: normalized.slice(splitIndex + 1).trim(),
   }
+}
+
+function deriveNodeCopy(node: FlowNode): { title: string; note: string } {
+  const title = node.label.trim() || 'Untitled step'
+  const notes = node.metadata.notes?.trim() ?? ''
+  if (notes) return { title, note: notes }
+  return splitLegacyNodeCopy(title)
 }
 
 function inferEdgeType(
@@ -311,13 +318,13 @@ function FlowNodeView({ data }: NodeProps<Node<RFNodeData>>) {
 }
 
 function toRFNode(node: FlowNode): Node<RFNodeData> {
-  const copy = splitNodeCopy(node.label)
+  const copy = deriveNodeCopy(node)
   return {
     id: node.id,
     position: node.position,
     type: 'workflowNode',
     data: {
-      label: node.label,
+      label: copy.note ? `${copy.title}\n${copy.note}` : copy.title,
       title: copy.title,
       note: copy.note,
       actor: node.actor,
@@ -430,6 +437,7 @@ export default function App() {
     selectVersion,
     setTab,
     updateNodeLabel,
+    updateNodeNotes,
     updateNodeActor,
     updateEdgeLabel,
     updateEdgeType,
@@ -1874,12 +1882,21 @@ export default function App() {
             <>
               <p className="muted">Selected node: {selectedNode.id}</p>
               <div className="field-group">
-                <label htmlFor="nodeLabel">Label</label>
-                <textarea
-                  id="nodeLabel"
-                  rows={5}
+                <label htmlFor="nodeTitle">Title</label>
+                <input
+                  id="nodeTitle"
+                  type="text"
                   value={selectedNode.label}
                   onChange={(event) => updateNodeLabel(selectedNode.id, event.target.value)}
+                />
+              </div>
+              <div className="field-group">
+                <label htmlFor="nodeNotes">Notes</label>
+                <textarea
+                  id="nodeNotes"
+                  rows={5}
+                  value={selectedNode.metadata.notes ?? ''}
+                  onChange={(event) => updateNodeNotes(selectedNode.id, event.target.value)}
                 />
               </div>
               <div className="field-group">

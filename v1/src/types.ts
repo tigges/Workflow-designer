@@ -201,6 +201,7 @@ export type PMStore = AppState & {
   setTab: (tab: ViewTab) => void
 
   updateNodeLabel: (nodeId: string, label: string) => void
+  updateNodeNotes: (nodeId: string, notes: string) => void
   updateNodeActor: (nodeId: string, actor: Actor) => void
   setVersionReviewState: (versionId: string, reviewState: string) => void
   requestReviewTransition: (versionId: string, nextState: ReviewState, note?: string) => {

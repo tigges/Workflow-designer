@@ -386,15 +386,20 @@ function importModelFromText(text: string): CanonicalModel {
   processLines.forEach((line, index) => {
     const type = inferNodeTypeFromText(line)
     const id = mkId('n')
+    const normalizedLine = line.replace(/^[-*]\s*/, '')
+    const byDelimiter = normalizedLine.match(/^(.{10,90}?)(?:\s*[;:]\s+|\s+[-–—]\s+)(.+)$/)
+    const title = byDelimiter ? byDelimiter[1].trim() : normalizedLine
+    const notes = byDelimiter ? byDelimiter[2].trim() : ''
     const node: FlowNode = {
       id,
       type,
-      label: line.replace(/^[-*]\s*/, ''),
+      label: title,
       actor: actorFromText(line),
       status: 'live',
       metadata: {
         stage: mapStage(index, processLines.length),
         touchpoint: `Step ${index + 1}`,
+        notes,
       },
       origin: 'text_import',
       confidence: normalizeConfidence(0.7 - index * 0.01, 0.65),
@@ -913,6 +918,26 @@ export const usePMStore = create<PMStore>((set, get) => ({
     set((state) => {
       const next = updateCurrentVersion(state, (model) => {
         model.nodes = model.nodes.map((n) => (n.id === nodeId ? { ...n, label } : n))
+      })
+      persist(next)
+      return next
+    })
+  },
+
+  updateNodeNotes: (nodeId, notes) => {
+    set((state) => {
+      const next = updateCurrentVersion(state, (model) => {
+        model.nodes = model.nodes.map((n) =>
+          n.id === nodeId
+            ? {
+                ...n,
+                metadata: {
+                  ...n.metadata,
+                  notes,
+                },
+              }
+            : n,
+        )
       })
       persist(next)
       return next
