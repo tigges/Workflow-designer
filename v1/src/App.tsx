@@ -494,6 +494,10 @@ export default function App() {
     writeStoredBool(UI_STORAGE_KEYS.inspectorVisible, inspectorVisible)
   }, [inspectorVisible])
 
+  useEffect(() => {
+    if (!sidebarVisible && aiAssistExpanded) setAiAssistExpanded(false)
+  }, [sidebarVisible, aiAssistExpanded])
+
   const canUndo = history.length > 1 && historyIndex > 0
 
   const mapActorBuckets = useMemo(() => {
@@ -960,7 +964,8 @@ export default function App() {
     selectedTab === 'import_map'
       ? 'Chapter guide while refining imported content, then actor layers.'
       : 'Chapter guide across the full map, then actor layers.'
-  const workspaceClasses = `workspace ${!sidebarVisible && !aiAssistExpanded ? 'sidebar-hidden' : ''} ${!inspectorVisible && !aiAssistExpanded ? 'inspector-hidden' : ''} ${aiAssistExpanded ? 'ai-expanded' : ''}`
+  const aiSidebarExpanded = aiAssistExpanded && sidebarVisible
+  const workspaceClasses = `workspace ${!sidebarVisible ? 'sidebar-hidden' : ''} ${!inspectorVisible ? 'inspector-hidden' : ''} ${aiSidebarExpanded ? 'ai-expanded-horizontal' : ''}`
 
   return (
     <div className="app-shell">
@@ -1067,7 +1072,7 @@ export default function App() {
       </header>
 
       <main className={workspaceClasses}>
-        <aside className={`sidebar ${!sidebarVisible && !aiAssistExpanded ? 'hidden' : ''} ${aiAssistExpanded ? 'expanded' : ''}`}>
+        <aside className={`sidebar ${!sidebarVisible ? 'hidden' : ''} ${aiSidebarExpanded ? 'expanded' : ''}`}>
           <section className={`ai-panel ai-top ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-section' : ''}`}>
             <div className="ai-panel-header">
               <div className="ai-badge">
@@ -1086,7 +1091,7 @@ export default function App() {
             </div>
             <div className="ai-prompt-wrap">
               <textarea
-                className={`ai-prompt ${aiAssistExpanded ? 'expanded' : ''} ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
+                className={`ai-prompt ${aiSidebarExpanded ? 'expanded' : ''} ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
                 value={aiPrompt}
                 onChange={(event) => setAiPrompt(event.target.value)}
                 readOnly={!FEATURE_AVAILABILITY.aiAssist}
@@ -1112,7 +1117,7 @@ export default function App() {
             </div>
           </section>
 
-          {!aiAssistExpanded && (
+          {!aiSidebarExpanded && (
             <>
           <section className="sb-sec build-sec">
             <div className="sb-row">
