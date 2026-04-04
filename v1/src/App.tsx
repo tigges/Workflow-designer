@@ -88,14 +88,6 @@ function reviewOptions(): ReviewState[] {
   return ['draft', 'in_review', 'approved', 'rejected']
 }
 
-const PHASES: Array<{ key: 'p1' | 'p2' | 'p3' | 'p4' | 'p5'; title: string; subtitle: string }> = [
-  { key: 'p1', title: 'Phase 1', subtitle: 'App shell + layout' },
-  { key: 'p2', title: 'Phase 2', subtitle: 'Canonical model + state' },
-  { key: 'p3', title: 'Phase 3', subtitle: 'Workspace CRUD + persistence' },
-  { key: 'p4', title: 'Phase 4', subtitle: 'Journey Flow editor' },
-  { key: 'p5', title: 'Phase 5', subtitle: 'Journey Map projection' },
-]
-
 export default function App() {
   const {
     projects,
@@ -185,6 +177,29 @@ export default function App() {
       .filter((bucket) => bucket.items.length > 0)
     return buckets
   }, [currentModel])
+  const mapPhases = useMemo(() => {
+    const nodes = [...(currentModel?.nodes ?? [])].sort((a, b) => a.position.x - b.position.x)
+    if (nodes.length === 0) return []
+
+    const phaseCount = Math.min(5, Math.max(2, Math.ceil(nodes.length / 2)))
+    const phaseSize = Math.ceil(nodes.length / phaseCount)
+    const phases: Array<{ id: string; title: string; summary: string }> = []
+
+    for (let index = 0; index < nodes.length; index += phaseSize) {
+      const phaseNodes = nodes.slice(index, index + phaseSize)
+      const name = `Phase ${phases.length + 1}`
+      const labels = phaseNodes.slice(0, 2).map((node) => node.label)
+      const extraCount = Math.max(0, phaseNodes.length - labels.length)
+      const summary = extraCount > 0 ? `${labels.join(' -> ')} +${extraCount} more` : labels.join(' -> ')
+      phases.push({
+        id: `${name.toLowerCase().replace(' ', '-')}-${index}`,
+        title: name,
+        summary,
+      })
+    }
+
+    return phases
+  }, [currentModel])
 
   function handleCreateProject() {
     const name = window.prompt('Project name', `Project ${projects.length + 1}`)
@@ -259,29 +274,6 @@ export default function App() {
           </button>
         </div>
       </header>
-
-      <section className="phase-strip-wrap">
-        <div className="phase-strip-head">
-          <strong>Phases</strong>
-          <span>Phase 4 and Phase 5 are now enabled in this build.</span>
-        </div>
-        <div className="phase-strip" role="list" aria-label="Implementation phases">
-          {PHASES.map((phase) => {
-            const isActive = (selectedTab === 'flow' && phase.key === 'p4') || (selectedTab === 'map' && phase.key === 'p5')
-            const isCompleted = ['p1', 'p2', 'p3', 'p4', 'p5'].includes(phase.key)
-            return (
-              <article
-                key={phase.key}
-                role="listitem"
-                className={`phase-chip ${isActive ? 'active' : ''} ${isCompleted ? 'done' : ''}`}
-              >
-                <h3>{phase.title}</h3>
-                <p>{phase.subtitle}</p>
-              </article>
-            )
-          })}
-        </div>
-      </section>
 
       <main className="workspace">
         <aside className="panel left-panel">
@@ -447,6 +439,24 @@ export default function App() {
             <div className="canvas">
               {selectedVersion ? (
                 <div className="map-view">
+                  <section className="map-phase-section">
+                    <div className="map-phase-head">
+                      <strong>Flow Map Phases</strong>
+                      <span>Horizontal phases derived from the journey flow order.</span>
+                    </div>
+                    <div className="map-phase-strip" role="list" aria-label="Flow map phases">
+                      {mapPhases.length === 0 ? (
+                        <div className="map-phase-empty">Add flow nodes to generate map phases.</div>
+                      ) : (
+                        mapPhases.map((phase) => (
+                          <article key={phase.id} role="listitem" className="map-phase-chip">
+                            <h4>{phase.title}</h4>
+                            <p>{phase.summary}</p>
+                          </article>
+                        ))
+                      )}
+                    </div>
+                  </section>
                   <div className="map-header">
                     <h3>Journey Map Projection</h3>
                     <p>Phase 5 view of the same canonical model, grouped by actor lanes.</p>
