@@ -305,6 +305,7 @@ type StructureCluster = 'projects' | 'artifacts' | 'versions' | null
 type DraftSourceType = 'text' | 'document'
 type ImportStage = 'toc_seed' | 'detail_ingest' | 'review' | 'confirmed'
 type DocMapFilter = 'all' | ImportDocumentBlockType
+type ExternalAssistProvider = 'none' | 'gemini' | 'copilot'
 
 const DOCMAP_FILTER_OPTIONS: Array<{ id: DocMapFilter; label: string }> = [
   { id: 'all', label: 'All' },
@@ -349,6 +350,7 @@ const UI_STORAGE_KEYS = {
   edgeMode: 'flowcraft.ui.edgeMode',
   sidebarVisible: 'flowcraft.ui.sidebarVisible',
   inspectorVisible: 'flowcraft.ui.inspectorVisible',
+  externalAssistProvider: 'flowcraft.ui.externalAssistProvider',
 } as const
 
 function readStoredBool(key: string, fallback: boolean): boolean {
@@ -361,6 +363,12 @@ function readStoredBool(key: string, fallback: boolean): boolean {
 function writeStoredBool(key: string, value: boolean) {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(key, value ? '1' : '0')
+}
+
+function readStoredExternalAssistProvider(): ExternalAssistProvider {
+  if (typeof window === 'undefined') return 'none'
+  const raw = window.localStorage.getItem(UI_STORAGE_KEYS.externalAssistProvider)
+  return raw === 'gemini' || raw === 'copilot' ? raw : 'none'
 }
 
 function readStoredStructureCluster(): StructureCluster {
@@ -540,6 +548,41 @@ function parseDocumentMapHtml(input: string, sourceLabel: string): ImportDocumen
     blocks,
     createdAt: new Date().toISOString(),
   }
+}
+
+function normalizeOcrText(input: string): string {
+  if (!input.trim()) return ''
+  const merged = input
+    .replace(/\r\n/g, '\n')
+    .replace(/([a-z0-9]),\n([a-z0-9])/gi, '$1, $2')
+    .replace(/([a-z0-9])-\n([a-z0-9])/gi, '$1$2')
+    .replace(/\n{3,}/g, '\n\n')
+  const lines = merged
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line, idx, arr) => {
+      if (!line) return idx > 0 && arr[idx - 1] !== ''
+      return true
+    })
+
+  const stitched: string[] = []
+  for (const line of lines) {
+    if (!stitched.length) {
+      stitched.push(line)
+      continue
+    }
+    const prev = stitched[stitched.length - 1]
+    const isHeading = /^[0-9]+(\.[0-9]+)*\s+/.test(line) || /^[A-Z][A-Z\s&/-]{6,}$/.test(line)
+    const startsBullet = /^([•\-*]|[0-9]+\.)\s+/.test(line)
+    const prevEndsSentence = /[.:;!?"]$/.test(prev)
+    if (!isHeading && !startsBullet && !prevEndsSentence) {
+      stitched[stitched.length - 1] = `${prev} ${line}`.replace(/\s+/g, ' ').trim()
+    } else {
+      stitched.push(line)
+    }
+  }
+
+  return stitched.join('\n').trim()
 }
 
 function normalizeDocMapText(raw: string): string {
@@ -740,6 +783,10 @@ export default function App() {
   const [edgeMode, setEdgeMode] = useState<EdgeMode>(() => readStoredEdgeMode())
   const [canvasTool, setCanvasTool] = useState<CanvasTool>('select')
   const [draftSourceType, setDraftSourceType] = useState<DraftSourceType>('text')
+  const [externalAssistProvider, setExternalAssistProvider] = useState<ExternalAssistProvider>(
+    () => readStoredExternalAssistProvider(),
+  )
+  const [externalAssistBusy, setExternalAssistBusy] = useState(false)
   const [docMapTargetKind, setDocMapTargetKind] = useState<ImportDocumentMapKind>('importedMap')
   const [docMapContentFilter, setDocMapContentFilter] = useState<DocMapFilter>('all')
   const [docMapImportedFilter, setDocMapImportedFilter] = useState<DocMapFilter>('all')
@@ -857,6 +904,11 @@ export default function App() {
     if (typeof window === 'undefined') return
     writeStoredBool(UI_STORAGE_KEYS.inspectorVisible, inspectorVisible)
   }, [inspectorVisible])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(UI_STORAGE_KEYS.externalAssistProvider, externalAssistProvider)
+  }, [externalAssistProvider])
 
   useEffect(() => {
     if (!sidebarVisible && aiAssistExpanded) setAiAssistExpanded(false)
@@ -1278,6 +1330,16 @@ export default function App() {
     setHeaderNotice(result.message)
   }
 
+  function handleNormalizeOcrText() {
+    const normalized = normalizeOcrText(aiPrompt)
+    if (!normalized) {
+      setHeaderNotice('Nothing to normalize. Paste OCR text first.')
+      return
+    }
+    setAiPrompt(normalized)
+    setHeaderNotice('OCR text normalized. Review and import.')
+  }
+
   function handleClearTemplate() {
     const result = clearCurrentVersion()
     if (!result.ok) {
@@ -1326,7 +1388,7 @@ export default function App() {
     if (template.mode === 'text') {
       const result = importFromText(template.payload)
       if (result.ok && (importStage === 'toc_seed' || importStage === 'confirmed')) {
-        setImportStage(template.id === 'gold-toc-seed' ? 'detail_ingest' : 'detail_ingest')
+        setImportStage('detail_ingest')
       }
       setHeaderNotice(result.ok ? `${template.label} loaded. ${result.message}` : result.message)
       return
@@ -1560,6 +1622,36 @@ export default function App() {
       }
     }
     setHeaderNotice(result.message)
+  }
+
+  async function handleExternalAssistGenerate() {
+    if (!aiPrompt.trim()) {
+      setHeaderNotice('Paste text first, then run external assist.')
+      return
+    }
+    if (externalAssistProvider === 'none') {
+      setHeaderNotice('Select Gemini or Copilot external assist first.')
+      return
+    }
+    setExternalAssistBusy(true)
+    try {
+      // Safe scaffold: normalize first, then route via existing AI assist path.
+      // Hook real provider calls here (backend proxy) when API integration is enabled.
+      const normalized = normalizeOcrText(aiPrompt)
+      if (normalized) setAiPrompt(normalized)
+      const result = importFromAiAssist(normalized || aiPrompt)
+      if (result.ok) {
+        setTab('import_map')
+        if (importStage === 'toc_seed' || importStage === 'confirmed') {
+          setImportStage('detail_ingest')
+        }
+      }
+      setHeaderNotice(
+        `${externalAssistProvider === 'gemini' ? 'Gemini' : 'Copilot'} scaffold run complete. ${result.message} (Direct API call not yet wired.)`,
+      )
+    } finally {
+      setExternalAssistBusy(false)
+    }
   }
 
   function handleImportStageAction() {
@@ -1934,6 +2026,37 @@ export default function App() {
                 }}
               >
                 →
+              </button>
+            </div>
+            <div className="ai-assist-tools">
+              <button
+                type="button"
+                className="tiny-btn ai-normalize-btn"
+                onClick={handleNormalizeOcrText}
+                disabled={!FEATURE_AVAILABILITY.aiAssist}
+                title="Clean OCR line breaks, hyphenation, and spacing"
+              >
+                Normalize OCR
+              </button>
+              <select
+                className="menu-inline-select ai-provider-select"
+                value={externalAssistProvider}
+                onChange={(event) => setExternalAssistProvider(event.target.value as ExternalAssistProvider)}
+                disabled={!FEATURE_AVAILABILITY.aiAssist || externalAssistBusy}
+                title="External provider scaffold"
+              >
+                <option value="none">External AI: off</option>
+                <option value="gemini">External AI: Gemini</option>
+                <option value="copilot">External AI: Copilot (manual)</option>
+              </select>
+              <button
+                type="button"
+                className="ai-provider-go"
+                onClick={handleExternalAssistGenerate}
+                disabled={!FEATURE_AVAILABILITY.aiAssist || externalAssistBusy}
+                title="Run external assist scaffold"
+              >
+                {externalAssistBusy ? 'Running…' : 'Use External AI'}
               </button>
             </div>
             <div className="ai-import-hint">{aiImportHint}</div>
