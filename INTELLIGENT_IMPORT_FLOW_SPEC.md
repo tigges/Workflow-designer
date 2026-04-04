@@ -1,6 +1,6 @@
 # Intelligent Automated Document Import and Journey Flow Conversion
 
-Version: v1.0  
+Version: v1.1  
 Status: Draft  
 Owner: Workflow Designer
 
@@ -8,107 +8,168 @@ Owner: Workflow Designer
 
 ## 1) Purpose
 
-Define the target architecture, data contracts, confidence model, and review workflow for an intelligent system that converts business documents into editable user journey maps and process flows.
+Define the target product and architecture for converting documents and raw text into editable user journey maps and process flows, with confidence scoring, human review, and production-ready export workflows.
 
-This specification is implementation-oriented and intended to guide MVP build and scale-out.
+This revision (v1.1) expands scope from pipeline-only to **product + pipeline** and aligns with implementation realities (projects, folders, import modes, exports, and review operations).
 
 ---
 
 ## 2) Problem Statement
 
-Teams store process knowledge in unstructured sources (PDFs, DOCX, PPTX, emails, internal docs). Converting this into a structured, editable journey map is manual, inconsistent, and slow.
+Teams store process knowledge in unstructured sources (PDF, DOCX, text notes, emails). Converting this into structured journey maps and process flows is manual, inconsistent, and slow.
 
 We need a system that:
 
-- Ingests documents from heterogeneous sources
+- Supports both manual-first and AI-assisted mapping
+- Ingests heterogeneous sources
 - Extracts actions, actors, decisions, systems, and exceptions
 - Synthesizes a canonical workflow graph
 - Scores confidence and validates structure
 - Routes uncertain outputs to human review
+- Exports production artifacts (JSON, Mermaid, SVG, PNG)
 - Learns from accepted edits over time
 
 ---
 
 ## 3) Design Principles
 
-1. **Canonical schema first** (single model across all source types)
-2. **Hybrid intelligence** (deterministic extraction + LLM reasoning)
-3. **Confidence-gated automation** (not all outputs auto-publish)
-4. **Human-in-the-loop by default for uncertainty**
-5. **Traceability** (every node/edge links to evidence)
-6. **Safe evolution** (typed contracts, validation, versioning)
+1. **Canonical schema first** (single source of truth model)
+2. **Map + Flow are projections** (never separate source models)
+3. **Hybrid intelligence** (deterministic extraction + LLM reasoning)
+4. **Confidence-gated automation** (safe defaults over blind auto-publish)
+5. **Human-in-the-loop for uncertainty**
+6. **Traceability for AI-generated elements**
+7. **Safe evolution** (typed contracts, schema versioning, migration-ready)
+8. **Product-plane reliability first** (projects, versions, exports, review UX)
 
 ---
 
-## 4) High-Level Architecture
+## 4) Product Scope Model (Editor Plane + Intelligence Plane)
 
 ```mermaid
 flowchart LR
-    A[Document Sources\nPDF DOCX PPTX TXT Email CSV BPMN] --> B[Ingestion and Normalization\nOCR Parsing Chunking Dedup Language Detect]
-    B --> C[Structured Understanding\nEntity Action Condition Sequence Extraction]
-    C --> D[Flow Synthesis Engine\nCanonical Graph Construction]
-    D --> E[Validation and Confidence\nRules Contradictions Risk Scoring]
-    E --> F{Confidence Gate}
-    F -->|High| G[Auto-Approve Candidate]
-    F -->|Medium or Low| H[Human Review Queue]
-    G --> I[Workflow Editor and Registry]
-    H --> I
-    I --> J[Learning Loop\nAccepted Edits -> Better Rules Prompts Models]
+    subgraph P[Editor Plane]
+      P1[Workspace and Project Management]
+      P2[Map and Flow Editing]
+      P3[Review and Approval]
+      P4[Export and Share]
+      P5[Version History]
+    end
+
+    subgraph I[Intelligence Plane]
+      I1[Ingestion and Parsing]
+      I2[Extraction]
+      I3[Synthesis]
+      I4[Validation and Confidence]
+      I5[Learning Loop]
+    end
+
+    P2 --> I4
+    I1 --> I2 --> I3 --> I4 --> P3
+    P3 --> P5
+    P2 --> P4
+    P3 --> I5
 ```
+
+### Rationale
+
+- The product must be useful even when AI import is unavailable.
+- Manual editing and review are first-class, not fallback behaviors.
+- Pipeline improvements should not break editor and export workflows.
 
 ---
 
-## 5) End-to-End Pipeline
+## 5) Execution Order (Recommended)
 
-### 5.1 Pipeline Stages
+This is the optimized implementation sequence for fastest usable outcomes and lower risk:
 
-1. **Ingest**
-   - Accept file uploads or source connectors.
-   - Normalize format and metadata.
-2. **Parse + Chunk**
-   - OCR for scanned docs.
-   - Layout-aware section splitting.
-3. **Extract**
-   - Actions (verb-led tasks), actors, systems, conditions, exceptions.
-4. **Synthesize**
-   - Build nodes and edges in canonical graph format.
-5. **Validate**
-   - Structural rules (terminals, decision exits, orphan detection).
-6. **Score**
-   - Node-level, edge-level, and flow-level confidence.
-7. **Route**
-   - Auto-approve or send to reviewer.
-8. **Review + Publish**
-   - Human edits and approves.
-9. **Learn**
-   - Persist corrections as supervised signals.
-
-### 5.2 Flow of Control
-
-```mermaid
-flowchart TD
-    A[Import Request] --> B[Normalize and Chunk]
-    B --> C[Extract Candidates]
-    C --> D[Synthesize Graph]
-    D --> E[Run Validation]
-    E --> F[Compute Confidence]
-    F --> G{Routing Policy}
-    G -->|overall >= threshold and no critical errors| H[Approve]
-    G -->|otherwise| I[Send to Review]
-    H --> J[Publish Flow]
-    I --> K[Reviewer Edits]
-    K --> L[Approve or Reject]
-    L --> J
-```
+1. **Workspace + Editor Core**
+   - Projects/folders/map artifacts/versioning
+   - Manual map/flow editing
+   - JSON export/import baseline
+2. **Import Modes**
+   - Text import
+   - AI-assisted text-to-flow
+3. **Review + Approval**
+   - Validation panel
+   - Candidate review state transitions
+4. **Document Ingestion**
+   - PDF/DOCX parse + extraction + synthesis
+   - Evidence links for AI-generated elements
+5. **Dual-view Projection**
+   - Journey Map and Journey Flow tabs from same model
+6. **Production Hardening**
+   - Observability, launch QA matrix, policy controls
 
 ---
 
-## 6) Canonical Data Model (v1)
+## 6) Import Modes (Operational)
 
-### 6.1 Type Definitions
+| Mode | Input | Output | Confidence Path | Notes |
+|---|---|---|---|---|
+| Manual | user edits | canonical graph | N/A | fastest and most reliable for early adoption |
+| Text Import | pasted text | candidate graph | required | low-friction entry point |
+| Doc Import | PDF/DOCX | candidate graph + evidence | required | parsing variability expected |
+| AI Assist | prompt + context | candidate graph | required | must be review-gated by policy |
+
+---
+
+## 7) Canonical Data Model (v1.1)
+
+### 7.1 Core Workspace Entities
 
 ```ts
-type Flow = {
+type Workspace = {
+  id: string;
+  name: string;
+  createdAt: string;
+};
+
+type Project = {
+  id: string;
+  workspaceId: string;
+  folderId?: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type Folder = {
+  id: string;
+  workspaceId: string;
+  name: string;
+};
+```
+
+### 7.2 Map Artifact and Versioning
+
+```ts
+type MapArtifact = {
+  id: string;
+  projectId: string;
+  name: string;
+  currentVersionId: string;
+  currentApprovedVersionId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type MapVersion = {
+  id: string;
+  artifactId: string;
+  schemaVersion: "1.1";
+  data: CanonicalModel;
+  reviewState: "draft" | "in_review" | "approved" | "rejected";
+  createdBy: string;
+  createdAt: string;
+};
+```
+
+### 7.3 Canonical Model + Projections
+
+```ts
+type CanonicalModel = {
   id: string;
   title: string;
   sourceDocs: SourceDocRef[];
@@ -116,18 +177,21 @@ type Flow = {
   edges: Edge[];
   confidence: ConfidenceSummary;
   validation: ValidationResult[];
-  reviewState: "draft" | "in_review" | "approved" | "rejected";
-  createdAt: string;
-  updatedAt: string;
+  projections: {
+    flow: ViewLayout;
+    map: ViewLayout;
+  };
 };
 
-type SourceDocRef = {
-  docId: string;
-  name: string;
-  type: "pdf" | "docx" | "pptx" | "txt" | "email" | "csv" | "bpmn";
-  version?: string;
+type ViewLayout = {
+  nodePositions: Record<string, { x: number; y: number }>;
+  groups?: Array<{ id: string; label: string; nodeIds: string[] }>;
 };
+```
 
+### 7.4 Nodes, Edges, Evidence
+
+```ts
 type Node = {
   id: string;
   type: "terminal" | "process" | "decision" | "data" | "annotation";
@@ -140,9 +204,14 @@ type Node = {
     aht?: string;
     volume?: string;
     notes?: string;
+    // map-oriented optional metadata
+    stage?: string;
+    touchpoint?: string;
+    emotion?: number; // e.g. -3..+3
   };
-  evidence: EvidenceRef[];
-  confidence: number; // 0..1
+  evidence?: EvidenceRef[]; // required for AI-imported nodes, optional for manual nodes
+  confidence?: number; // 0..1 for AI-imported nodes
+  origin: "manual" | "text_import" | "doc_import" | "ai_assist";
 };
 
 type Edge = {
@@ -151,8 +220,16 @@ type Edge = {
   to: string;
   type: "sequential" | "conditional" | "parallel" | "fallback";
   label?: string;
-  evidence: EvidenceRef[];
-  confidence: number; // 0..1
+  evidence?: EvidenceRef[]; // required for AI-imported edges
+  confidence?: number; // 0..1 for AI-imported edges
+  origin: "manual" | "text_import" | "doc_import" | "ai_assist";
+};
+
+type SourceDocRef = {
+  docId: string;
+  name: string;
+  type: "pdf" | "docx" | "pptx" | "txt" | "email" | "csv" | "bpmn";
+  version?: string;
 };
 
 type EvidenceRef = {
@@ -162,7 +239,11 @@ type EvidenceRef = {
   page?: number;
   section?: string;
 };
+```
 
+### 7.5 Confidence + Validation
+
+```ts
 type ConfidenceSummary = {
   overall: number; // 0..1
   extraction: number;
@@ -176,213 +257,198 @@ type ValidationResult = {
     | "DECISION_NEEDS_EXITS"
     | "ISOLATED_NODE"
     | "UNLABELED_CONDITIONAL"
-    | "CYCLE_WARNING";
+    | "CYCLE_WARNING"
+    | "MISSING_EVIDENCE_AI_ELEMENT";
   severity: "info" | "warn" | "error";
   message: string;
   targetId?: string;
 };
 ```
 
-### 6.2 Entity Relationship Illustration
+---
+
+## 8) Map vs Flow Tabs (Single Model Rule)
+
+Journey Map and Journey Flow are **two projections of the same canonical model**.
 
 ```mermaid
-erDiagram
-    FLOW ||--o{ NODE : contains
-    FLOW ||--o{ EDGE : contains
-    FLOW ||--o{ VALIDATION_RESULT : has
-    FLOW ||--o{ SOURCE_DOC_REF : references
-    NODE ||--o{ EVIDENCE_REF : supported_by
-    EDGE ||--o{ EVIDENCE_REF : supported_by
+flowchart LR
+    A[Canonical Model] --> B[Journey Flow Projection]
+    A --> C[Journey Map Projection]
+    B --> D[Flow Editor]
+    C --> E[Map Editor]
+    D --> A
+    E --> A
 ```
+
+### Rules
+
+1. Shared fields (label, actor, status, metadata common fields) update both tabs.
+2. View-specific layout data is isolated to `projections.flow` or `projections.map`.
+3. No duplicated node/edge identities across tabs.
 
 ---
 
-## 7) Confidence and Routing Policy
+## 9) Confidence and Routing Policy
 
-### 7.1 Confidence Levels
+### 9.1 Confidence Levels
 
-- **High confidence**: overall >= 0.85 and no error validations
-- **Medium confidence**: 0.60 to 0.84 or one/more warnings
-- **Low confidence**: < 0.60 or contradiction/critical errors
+- **High**: overall >= 0.85 and no error validations
+- **Medium**: 0.60 to 0.84 or warnings
+- **Low**: < 0.60 or critical contradictions
 
-### 7.2 Routing
+### 9.2 Routing
 
 ```mermaid
 flowchart TD
-    A[Flow Candidate] --> B{Validation Errors?}
-    B -->|Yes, critical| C[Mandatory Manual Review]
+    A[Candidate Version] --> B{Critical Errors?}
+    B -->|Yes| C[Mandatory Review]
     B -->|No| D{Overall Confidence}
-    D -->|>= 0.85| E[Auto-Approve]
-    D -->|0.60 - 0.84| F[Review Queue]
+    D -->|>= 0.85| E[Auto-Approve Eligible]
+    D -->|0.60 - 0.84| C
     D -->|< 0.60| C
-    C --> F
-    F --> G[Reviewer Edit + Approve]
-    E --> H[Published Flow]
+    C --> F[Reviewer Edit]
+    F --> G[Approve or Reject]
+    E --> H[Approved Version]
     G --> H
 ```
 
 ---
 
-## 8) Review Lifecycle
+## 10) Security and Key Handling Policy
 
-```mermaid
-stateDiagram-v2
-    [*] --> draft
-    draft --> in_review: submit
-    in_review --> approved: approve
-    in_review --> rejected: reject
-    approved --> draft: source_changed_or_major_edit
-    rejected --> draft: retry
-```
+### 10.1 Preferred
 
----
+- Provider API keys are stored server-side only.
+- Client requests use workspace-scoped backend token.
+- No provider key material is returned to browser.
 
-## 9) API Contract (v1)
+### 10.2 If client-side key entry is temporarily allowed
 
-### 9.1 `POST /api/import`
+- Store encrypted at rest in browser storage.
+- Never log key values in telemetry or console.
+- Provide clear user warning and revocation guidance.
+- Mask values in UI and disable accidental export of secrets.
 
-Purpose: ingest one or more documents and create parse job.
+### 10.3 Additional Security Requirements
 
-Request:
-
-```json
-{
-  "documents": [
-    { "name": "support-playbook.pdf", "type": "pdf", "contentBase64": "<...>" }
-  ]
-}
-```
-
-Response:
-
-```json
-{
-  "jobId": "job_123",
-  "status": "queued"
-}
-```
-
-### 9.2 `POST /api/synthesize`
-
-Purpose: run extraction + synthesis and return flow candidate.
-
-Request:
-
-```json
-{
-  "jobId": "job_123",
-  "options": {
-    "maxNodes": 20,
-    "targetStyle": "journey"
-  }
-}
-```
-
-Response:
-
-```json
-{
-  "flow": {},
-  "status": "in_review"
-}
-```
-
-(`flow` follows canonical schema in Section 6.)
-
-### 9.3 `POST /api/review/{flowId}/approve`
-
-Purpose: approve reviewed flow.
-
-Request:
-
-```json
-{
-  "reviewerId": "user_42",
-  "notes": "Looks accurate after edge label fixes."
-}
-```
-
-Response:
-
-```json
-{
-  "flowId": "flow_456",
-  "reviewState": "approved"
-}
-```
+- Encrypted storage for documents/artifacts
+- Access control by workspace/project
+- PII-redaction for evidence snippets in logs
 
 ---
 
-## 10) MVP Scope (Minimize Build Cost)
+## 11) Export Contract (v1.1)
 
-### 10.1 In Scope (v1)
+Supported formats:
 
-- Sources: PDF, DOCX, pasted text
-- Canonical graph generation (nodes + edges)
-- Confidence scoring and routing
-- Human review queue
-- Editable flow in UI
-- JSON export/import
+- `json` (round-trip required)
+- `mermaid` (high-fidelity structure expected)
+- `svg` (visual fidelity expected)
+- `png` (rendered snapshot)
 
-### 10.2 Out of Scope (v1)
+```ts
+type ExportArtifact = {
+  id: string;
+  artifactId: string;
+  versionId: string;
+  format: "json" | "mermaid" | "svg" | "png";
+  createdAt: string;
+  url: string;
+};
+```
 
-- Full BPMN round-trip fidelity
+### Fidelity Notes
+
+- JSON is source of truth and must round-trip with no structural loss.
+- Mermaid/SVG/PNG are publish outputs; minor layout differences are acceptable.
+
+---
+
+## 12) API Contract (v1.1)
+
+### 12.1 Workspace and Artifact APIs
+
+- `POST /api/projects`
+- `POST /api/projects/{projectId}/artifacts`
+- `POST /api/artifacts/{artifactId}/versions`
+- `POST /api/artifacts/{artifactId}/export`
+
+### 12.2 Import and Synthesis APIs
+
+- `POST /api/import` (documents/text)
+- `POST /api/synthesize` (candidate generation)
+- `POST /api/review/{versionId}/approve`
+- `POST /api/review/{versionId}/reject`
+
+Request/response payloads use schema version `1.1`.
+
+---
+
+## 13) MVP Scope (Optimized)
+
+### 13.1 In Scope (v1)
+
+- Workspace/project/artifact/version model
+- Manual editing (flow-first)
+- Journey Flow + Journey Map tabs from one model
+- Text import + AI assist import
+- Validation + review lifecycle
+- JSON/Mermaid/SVG/PNG export
+- Basic observability and launch QA checklist
+
+### 13.2 Out of Scope (v1)
+
+- Full BPMN round-trip parity
 - Real-time multi-user collaboration
-- Deep analytics/process mining
-- Multi-language domain adaptation beyond baseline
+- Deep process mining analytics
+- Broad multilingual domain packs
 
 ---
 
-## 11) Non-Functional Requirements
+## 14) Quality Gates and Launch Checklist
 
-### 11.1 Performance
+Use pass/warn/fail ratings per environment and release candidate.
 
-- Import-to-candidate target under practical interactive threshold for typical docs.
-- Editor interactions remain responsive under expected node/edge volume.
-
-### 11.2 Reliability
-
-- Idempotent import and synthesis requests by request key.
-- Versioned flow records and audit logs for review actions.
-
-### 11.3 Security
-
-- Encrypted storage for documents and artifacts.
-- Access control by workspace/project.
-- PII-safe logging and redact-by-default telemetry for source excerpts.
-
-### 11.4 Observability
-
-- Metrics:
-  - parse success rate
-  - synthesis success rate
-  - auto-approval rate
-  - reviewer edit distance
-  - average confidence by source type
-- Trace spans across import -> extraction -> synthesis -> review.
+| Gate | Pass Criteria |
+|---|---|
+| Schema Validity | 100% candidate versions validate against schema 1.1 |
+| Validation Engine | Decision exits, terminal reachability, orphan detection verified |
+| Confidence Routing | Low-confidence candidates never auto-approve |
+| Review Workflow | Draft -> in_review -> approved/rejected transitions reliable |
+| Export Fidelity | JSON round-trip lossless; Mermaid/SVG/PNG generation stable |
+| Security | No secrets in logs; key handling policy enforced |
+| Performance | Editor remains responsive at target map size |
+| Observability | Metrics and traces visible for import->approve path |
 
 ---
 
-## 12) Quality and Acceptance Criteria
+## 15) Non-Functional Requirements
 
-1. System can generate valid flow candidates from supported source types.
-2. Every node and edge includes evidence references.
-3. Validation catches structural errors reliably.
-4. Confidence routing sends uncertain outputs to human review.
-5. Reviewer can edit and approve in the same product workflow.
-6. Approved corrections are stored for continuous improvement.
+### 15.1 Performance
+
+- Editor interactions remain responsive at expected node/edge volume.
+- Import-to-candidate latency is observable and bounded for typical docs.
+
+### 15.2 Reliability
+
+- Idempotent import/synthesis requests via request key.
+- Versioned artifacts and auditable review transitions.
+
+### 15.3 Observability
+
+Track:
+
+- parse success rate
+- synthesis success rate
+- auto-approval rate
+- reviewer edit distance
+- export success rate by format
+- confidence distribution by import mode/source type
 
 ---
 
-## 13) Implementation Notes
-
-- Keep extraction and synthesis loosely coupled via stable intermediate payloads.
-- Keep confidence model explainable (feature contributions preferred).
-- Keep all contracts versioned (`schemaVersion`) to support migrations.
-
----
-
-## 14) Future Enhancements
+## 16) Future Enhancements
 
 - BPMN import/export parity
 - Process mining from event logs

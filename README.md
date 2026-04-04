@@ -5,6 +5,7 @@ A lightweight browser-based MVP for business process workflow design, mapping, v
 ## Specifications
 
 - [Intelligent Automated Document Import and Journey Flow Conversion Spec](./INTELLIGENT_IMPORT_FLOW_SPEC.md)
+  - Includes v1.1 updates: workspace/artifact model, map-vs-flow projection strategy, import modes, key handling policy, export contracts, and launch QA gates.
 
 ## Draft UX Prototype (Import + Journey Map + Review)
 
