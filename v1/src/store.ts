@@ -364,6 +364,28 @@ function importModelFromDoc(text: string): CanonicalModel {
   return base
 }
 
+function applyAiAssistSignature(
+  model: CanonicalModel,
+  title: string,
+  confidence: ConfidenceSummary,
+): CanonicalModel {
+  const next = clone(model)
+  next.title = title
+  next.nodes = next.nodes.map((node) => ({
+    ...node,
+    origin: 'ai_assist',
+    confidence: normalizeConfidence((node.confidence ?? 0.7) - 0.08, 0.58),
+  }))
+  next.edges = next.edges.map((edge) => ({
+    ...edge,
+    origin: 'ai_assist',
+    confidence: normalizeConfidence((edge.confidence ?? 0.7) - 0.08, 0.58),
+  }))
+  next.confidence = confidence
+  validate(next)
+  return next
+}
+
 function importModelFromAiPrompt(prompt: string): CanonicalModel {
   const normalized = prompt.trim()
   const lines =
@@ -377,20 +399,21 @@ function importModelFromAiPrompt(prompt: string): CanonicalModel {
         ]
       : ['Start workflow', 'Triage request', 'Decision: Is information complete?', 'Resolve case', 'Close case']
   const model = importModelFromText(lines.join('\n'))
-  model.title = 'AI Assisted Candidate'
-  model.nodes = model.nodes.map((node) => ({
-    ...node,
-    origin: 'ai_assist',
-    confidence: normalizeConfidence((node.confidence ?? 0.7) - 0.08, 0.58),
-  }))
-  model.edges = model.edges.map((edge) => ({
-    ...edge,
-    origin: 'ai_assist',
-    confidence: normalizeConfidence((edge.confidence ?? 0.7) - 0.08, 0.58),
-  }))
-  model.confidence = { overall: 0.59, extraction: 0.61, synthesis: 0.62, validationPenalty: 0 }
-  validate(model)
-  return model
+  return applyAiAssistSignature(model, 'AI Assisted Candidate', {
+    overall: 0.59,
+    extraction: 0.61,
+    synthesis: 0.62,
+    validationPenalty: 0,
+  })
+}
+
+function looksLikeStructuredStepImport(text: string): boolean {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (lines.length < 4) return false
+  return lines.some((line) => /^(start:|end:|decision:)/i.test(line))
 }
 
 function normalizeImportedModel(input: unknown): CanonicalModel {
@@ -1000,8 +1023,17 @@ export const usePMStore = create<PMStore>((set, get) => ({
   importFromAiAssist: (prompt: string) => {
     const trimmed = prompt.trim()
     const tocClusters = trimmed ? parseTocSeedClusters(trimmed) : null
+    const structuredStepImport =
+      !tocClusters && trimmed.length > 0 ? looksLikeStructuredStepImport(trimmed) : false
     const imported = tocClusters
       ? importModelFromTocSeed(tocClusters, 'ai_assist')
+      : structuredStepImport
+        ? applyAiAssistSignature(importModelFromText(trimmed), 'AI Assisted Structured Import', {
+            overall: 0.63,
+            extraction: 0.66,
+            synthesis: 0.64,
+            validationPenalty: 0,
+          })
       : importModelFromAiPrompt(prompt)
     set((state) => {
       const next = applyModelToSelectedVersion(
@@ -1016,6 +1048,12 @@ export const usePMStore = create<PMStore>((set, get) => ({
       return {
         ok: true,
         message: `AI assist detected TOC seed and imported ${imported.nodes.length} clusters.`,
+      }
+    }
+    if (structuredStepImport) {
+      return {
+        ok: true,
+        message: `AI assist detected structured step input and imported ${imported.nodes.length} nodes.`,
       }
     }
     return {
