@@ -84,6 +84,8 @@ const ACTOR_OPTIONS: Array<{ value: Actor; label: string }> = [
   { value: 'external', label: 'External' },
 ]
 
+const JOURNEY_CHAPTERS = ['Discover', 'Consider', 'Onboard', 'Use', 'Resolve', 'Retain']
+
 function reviewOptions(): ReviewState[] {
   return ['draft', 'in_review', 'approved', 'rejected']
 }
@@ -179,26 +181,39 @@ export default function App() {
   }, [currentModel])
   const mapPhases = useMemo(() => {
     const nodes = [...(currentModel?.nodes ?? [])].sort((a, b) => a.position.x - b.position.x)
-    if (nodes.length === 0) return []
-
-    const phaseCount = Math.min(5, Math.max(2, Math.ceil(nodes.length / 2)))
-    const phaseSize = Math.ceil(nodes.length / phaseCount)
-    const phases: Array<{ id: string; title: string; summary: string }> = []
-
-    for (let index = 0; index < nodes.length; index += phaseSize) {
-      const phaseNodes = nodes.slice(index, index + phaseSize)
-      const name = `Phase ${phases.length + 1}`
-      const labels = phaseNodes.slice(0, 2).map((node) => node.label)
-      const extraCount = Math.max(0, phaseNodes.length - labels.length)
-      const summary = extraCount > 0 ? `${labels.join(' -> ')} +${extraCount} more` : labels.join(' -> ')
-      phases.push({
-        id: `${name.toLowerCase().replace(' ', '-')}-${index}`,
-        title: name,
-        summary,
-      })
+    if (nodes.length === 0) {
+      return JOURNEY_CHAPTERS.map((title, index) => ({
+        id: `chapter-${index + 1}`,
+        title,
+        summary: '0 steps',
+      }))
     }
 
-    return phases
+    const xValues = nodes.map((node) => node.position.x)
+    const minX = Math.min(...xValues)
+    const maxX = Math.max(...xValues)
+    const span = Math.max(1, maxX - minX)
+
+    return JOURNEY_CHAPTERS.map((title, index) => {
+      const start = minX + (index / JOURNEY_CHAPTERS.length) * span
+      const end = minX + ((index + 1) / JOURNEY_CHAPTERS.length) * span
+      const chapterNodes = nodes.filter((node) => {
+        if (index === JOURNEY_CHAPTERS.length - 1) {
+          return node.position.x >= start && node.position.x <= end
+        }
+        return node.position.x >= start && node.position.x < end
+      })
+      const labels = chapterNodes.slice(0, 2).map((node) => node.label)
+      const suffix = chapterNodes.length > labels.length ? ` +${chapterNodes.length - labels.length}` : ''
+      const preview = labels.length > 0 ? `${labels.join(' -> ')}${suffix}` : 'No mapped steps yet'
+      const countLabel = `${chapterNodes.length} step${chapterNodes.length === 1 ? '' : 's'}`
+
+      return {
+        id: `chapter-${index + 1}`,
+        title,
+        summary: `${countLabel} • ${preview}`,
+      }
+    })
   }, [currentModel])
 
   function handleCreateProject() {
@@ -467,21 +482,37 @@ export default function App() {
                       <p>Add nodes in Journey Flow and assign actor values to populate this map.</p>
                     </div>
                   ) : (
-                    <div className="lane-list">
-                      {mapActorBuckets.map((bucket) => (
-                        <section key={bucket.actor} className="lane">
-                          <div className="lane-title">{bucket.label}</div>
-                          <div className="lane-items">
-                            {bucket.items.map((node) => (
-                              <article key={node.id} className={`lane-node ${node.type}`}>
-                                <strong>{node.label}</strong>
-                                <span>{node.type}</span>
-                              </article>
-                            ))}
-                          </div>
-                        </section>
-                      ))}
-                    </div>
+                    <>
+                      <section className="map-phase-section">
+                        <div className="map-phase-head">
+                          <strong>Map Chapters</strong>
+                          <span>Overview of the full journey, shown above the customer lane.</span>
+                        </div>
+                        <div className="map-phase-strip" role="list" aria-label="Flow map phases">
+                          {mapPhases.map((phase) => (
+                            <article key={phase.id} role="listitem" className="map-phase-chip">
+                              <h4>{phase.title}</h4>
+                              <p>{phase.summary}</p>
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                      <div className="lane-list">
+                        {mapActorBuckets.map((bucket) => (
+                          <section key={bucket.actor} className="lane">
+                            <div className="lane-title">{bucket.label}</div>
+                            <div className="lane-items">
+                              {bucket.items.map((node) => (
+                                <article key={node.id} className={`lane-node ${node.type}`}>
+                                  <strong>{node.label}</strong>
+                                  <span>{node.type}</span>
+                                </article>
+                              ))}
+                            </div>
+                          </section>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               ) : (
