@@ -1162,8 +1162,8 @@ export default function App() {
                   fitView
                 >
                   <Background gap={24} color="#e6eaf1" />
-                  <MiniMap />
-                  <Controls />
+                  <MiniMap className="floating-minimap" position="bottom-right" />
+                  <Controls className="floating-controls" position="bottom-left" />
                 </ReactFlow>
               ) : (
                 <div className="canvas-empty">
