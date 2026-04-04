@@ -2043,6 +2043,35 @@
   background: #f8fafd;
 }
 
+.docmap-source-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.docmap-source-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6f7c95;
+}
+
+.docmap-source-select {
+  border: 1px solid #d3dbe9;
+  border-radius: 7px;
+  background: #fff;
+  color: #62708a;
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+.docmap-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .lane-list {
   display: flex;
   flex-direction: column;

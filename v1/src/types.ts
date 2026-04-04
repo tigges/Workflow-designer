@@ -31,6 +31,14 @@ export type ImportDocumentMap = {
   createdAt: string
 }
 
+export type ImportDocumentMapKind = 'contentMap' | 'importedMap'
+
+export type ImportDocumentMapBundle = {
+  contentMap: ImportDocumentMap | null
+  importedMap: ImportDocumentMap | null
+}
+export type ImportDocumentMaps = ImportDocumentMapBundle
+
 export type Workspace = {
   id: string
   name: string
@@ -160,7 +168,11 @@ export type MapVersion = {
   name: string
   schemaVersion: SchemaVersion
   data: CanonicalModel
+  /**
+   * Legacy single-map slot; retained for local storage migration.
+   */
   importDocumentMap?: ImportDocumentMap
+  importDocumentMaps?: ImportDocumentMapBundle
   reviewState: ReviewState
   reviewAudit: ReviewAuditEntry[]
   exportArtifacts: ExportArtifact[]
@@ -233,8 +245,12 @@ export type PMStore = AppState & {
   importFromDocument: (input: string) => { ok: boolean; message: string }
   importFromAiAssist: (prompt: string) => { ok: boolean; message: string }
   clearCurrentVersion: () => { ok: boolean; message: string }
-  setImportDocumentMapForSelectedVersion: (documentMap: ImportDocumentMap | null) => void
-  getImportDocumentMapForSelectedVersion: () => ImportDocumentMap | null
+  setImportDocumentMapForSelectedVersion: (
+    kind: ImportDocumentMapKind,
+    documentMap: ImportDocumentMap | null,
+  ) => void
+  getImportDocumentMapForSelectedVersion: (kind: ImportDocumentMapKind) => ImportDocumentMap | null
+  getImportDocumentMapsForSelectedVersion: () => ImportDocumentMapBundle | null
   importFromJson: (rawJson: string) => { ok: boolean; message: string }
   recordExportForSelectedVersion: (payload: {
     format: ExportFormat

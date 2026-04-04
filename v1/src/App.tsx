@@ -41,6 +41,10 @@ import type {
   ExportFormat,
   FlowEdge,
   FlowNode,
+  ImportDocumentBlock,
+  ImportDocumentBlockType,
+  ImportDocumentMap,
+  ImportDocumentMapKind,
   ReviewState,
 } from './types'
 import { GOLD_IMPORT_FIXTURES, evaluateImportQuality, type GoldImportFixture, type ImportEvalMetrics } from './evals'
@@ -158,6 +162,16 @@ type CanvasTool = 'select' | 'connect'
 type StructureCluster = 'projects' | 'artifacts' | 'versions' | null
 type DraftSourceType = 'text' | 'document'
 type ImportStage = 'toc_seed' | 'detail_ingest' | 'review' | 'confirmed'
+type DocMapFilter = 'all' | ImportDocumentBlockType
+
+const DOCMAP_FILTER_OPTIONS: Array<{ id: DocMapFilter; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'context', label: 'Context' },
+  { id: 'process', label: 'Process' },
+  { id: 'subprocess', label: 'Subprocess' },
+  { id: 'fact', label: 'Fact' },
+  { id: 'unclassified', label: 'Unclassified' },
+]
 
 const IMPORT_STAGE_STEPS: Array<{
   id: ImportStage
@@ -293,6 +307,117 @@ function inferEdgeType(
   if (targetNode.type === 'annotation') return 'fallback'
   if (sourceNode.type === 'data' || targetNode.type === 'data') return 'parallel'
   return 'sequential'
+}
+
+function sanitizeHtmlText(raw: string): string {
+  return raw
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function detectDocumentMapTypeFromClasses(className: string): ImportDocumentBlockType {
+  const normalized = className.toLowerCase()
+  if (
+    normalized.includes('context_process_category') ||
+    normalized.includes('c-context') ||
+    normalized.includes('context')
+  ) {
+    return 'context'
+  }
+  if (normalized.includes('c-subprocess') || normalized.includes('subprocess')) return 'subprocess'
+  if (normalized.includes('c-process') || normalized.includes('process')) return 'process'
+  if (normalized.includes('c-fact') || normalized.includes('fact')) return 'fact'
+  return 'unclassified'
+}
+
+function parseConfidenceFromText(raw: string): number | null {
+  const match = raw.match(/[0-9]+(?:\.[0-9]+)?/)
+  if (!match) return null
+  const value = Number(match[0])
+  if (Number.isNaN(value)) return null
+  return Math.max(0, Math.min(1, value))
+}
+
+function parseDocumentMapHtml(input: string, sourceLabel: string): ImportDocumentMap | null {
+  const trimmed = input.trim()
+  if (!trimmed || !/<html[\s>]/i.test(trimmed)) return null
+  if (typeof window === 'undefined' || typeof DOMParser === 'undefined') return null
+
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(trimmed, 'text/html')
+  const title =
+    sanitizeHtmlText(
+      doc.querySelector('.header-title')?.textContent ||
+        doc.querySelector('title')?.textContent ||
+        'Imported document map',
+    ) || 'Imported document map'
+
+  const pageCards = Array.from(doc.querySelectorAll('.page-card'))
+  const blocks: ImportDocumentBlock[] = []
+
+  pageCards.forEach((card, cardIndex) => {
+    const pageText = sanitizeHtmlText(card.querySelector('.page-num')?.textContent || '')
+    const pageNumber = Number(pageText.match(/[0-9]+/)?.[0] ?? cardIndex + 1)
+    const blockNodes = Array.from(card.querySelectorAll('.block'))
+    blockNodes.forEach((blockNode, blockIndex) => {
+      const interpreted = sanitizeHtmlText(blockNode.querySelector('.block-interpreted')?.textContent || '')
+      const excerpt = sanitizeHtmlText(blockNode.querySelector('.block-excerpt')?.textContent || '')
+      const confidence = parseConfidenceFromText(
+        sanitizeHtmlText(blockNode.querySelector('.conf')?.textContent || ''),
+      )
+      const signals = Array.from(blockNode.querySelectorAll('.signal'))
+        .map((node) => sanitizeHtmlText(node.textContent || ''))
+        .filter(Boolean)
+      const type = detectDocumentMapTypeFromClasses(blockNode.className)
+      if (!interpreted && !excerpt && signals.length === 0) return
+      blocks.push({
+        id: `dm-${pageNumber}-${blockIndex + 1}`,
+        page: Number.isFinite(pageNumber) ? pageNumber : cardIndex + 1,
+        type,
+        interpreted: interpreted || `Block ${blocks.length + 1}`,
+        excerpt,
+        confidence,
+        signals,
+      })
+    })
+  })
+
+  if (blocks.length === 0) return null
+  const pageCountFromMeta = Number(
+    sanitizeHtmlText(doc.querySelector('.header-meta')?.textContent || '').match(/([0-9]+)\s+pages?/i)?.[1] ?? 0,
+  )
+  const pageCount =
+    pageCountFromMeta > 0 ? pageCountFromMeta : Math.max(...blocks.map((block) => block.page), 1)
+
+  return {
+    id: `docmap_${Math.random().toString(36).slice(2, 10)}`,
+    title,
+    sourceLabel,
+    pageCount,
+    blocks,
+    createdAt: new Date().toISOString(),
+  }
+}
+
+function normalizeDocMapText(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function blockMatchesModel(block: ImportDocumentBlock, model: CanonicalModel | null): boolean {
+  if (!model) return false
+  const interpreted = normalizeDocMapText(block.interpreted)
+  const excerpt = normalizeDocMapText(block.excerpt)
+  const needles = [interpreted, excerpt]
+    .filter((value) => value.length > 0)
+    .flatMap((value) => value.split(' ').filter((token) => token.length >= 4))
+    .slice(0, 10)
+  if (needles.length === 0) return false
+
+  return model.nodes.some((node) => {
+    const hay = normalizeDocMapText(`${node.label} ${node.metadata.notes ?? ''}`)
+    return needles.some((needle) => hay.includes(needle))
+  })
 }
 
 function isFlowCanvasTab(tab: 'flow' | 'import_map' | 'map') {
@@ -451,6 +576,8 @@ export default function App() {
     importFromDocument,
     importFromAiAssist,
     clearCurrentVersion,
+    setImportDocumentMapForSelectedVersion,
+    getImportDocumentMapsForSelectedVersion,
     importFromJson,
     recordExportForSelectedVersion,
     getExportHistoryForSelectedVersion,
@@ -471,6 +598,9 @@ export default function App() {
   const [edgeMode, setEdgeMode] = useState<EdgeMode>(() => readStoredEdgeMode())
   const [canvasTool, setCanvasTool] = useState<CanvasTool>('select')
   const [draftSourceType, setDraftSourceType] = useState<DraftSourceType>('text')
+  const [docMapTargetKind, setDocMapTargetKind] = useState<ImportDocumentMapKind>('importedMap')
+  const [docMapContentFilter, setDocMapContentFilter] = useState<DocMapFilter>('all')
+  const [docMapImportedFilter, setDocMapImportedFilter] = useState<DocMapFilter>('all')
   const [importBusy, setImportBusy] = useState(false)
   const [qaBusy, setQaBusy] = useState(false)
   const [exportBusy, setExportBusy] = useState(false)
@@ -1087,6 +1217,136 @@ export default function App() {
     setHeaderNotice(result.message)
   }
 
+  function docMapFilteredBlocks(map: ImportDocumentMap, filter: DocMapFilter): ImportDocumentBlock[] {
+    if (filter === 'all') return map.blocks
+    return map.blocks.filter((block) => block.type === filter)
+  }
+
+  function renderDocumentMapPanel(options: {
+    kind: ImportDocumentMapKind
+    map: ImportDocumentMap | null
+    filter: DocMapFilter
+    setFilter: (next: DocMapFilter) => void
+  }) {
+    const { kind, map, filter, setFilter } = options
+    const heading = kind === 'contentMap' ? 'Content Map' : 'Imported Map'
+    if (!map) {
+      return (
+        <section className="docmap-review">
+          <div className="docmap-head">
+            <strong>{heading}</strong>
+            <span className="docmap-meta">No map loaded</span>
+          </div>
+          <div className="docmap-empty">
+            Upload an HTML document map and set target to <strong>{heading}</strong> in Import options.
+          </div>
+        </section>
+      )
+    }
+    const filteredBlocks = docMapFilteredBlocks(map, filter)
+    const matchedCount = filteredBlocks.filter((block) => blockMatchesModel(block, currentModel)).length
+    const lowConfidenceCount = filteredBlocks.filter(
+      (block) => block.confidence !== null && block.confidence < 0.75,
+    ).length
+    const clusterCounts = filteredBlocks.reduce<Record<ImportDocumentBlockType, number>>(
+      (acc, block) => {
+        acc[block.type] += 1
+        return acc
+      },
+      { context: 0, process: 0, subprocess: 0, fact: 0, unclassified: 0 },
+    )
+    return (
+      <section className="docmap-review">
+        <div className="docmap-head">
+          <strong>{heading}</strong>
+          <span className="docmap-meta">
+            {map.title} · {map.pageCount} pages · {filteredBlocks.length}/{map.blocks.length} blocks
+          </span>
+        </div>
+        <div className="docmap-filters">
+          {DOCMAP_FILTER_OPTIONS.map((option) => (
+            <button
+              key={`${kind}-${option.id}`}
+              type="button"
+              className={`docmap-filter-btn ${filter === option.id ? 'active' : ''}`}
+              onClick={() => setFilter(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <div className="docmap-grid">
+          <section className="docmap-block-list">
+            <h4>Blocks</h4>
+            <div className="docmap-block-scroll">
+              {filteredBlocks.length === 0 ? (
+                <div className="docmap-empty">No blocks match the selected filter.</div>
+              ) : (
+                filteredBlocks.map((block) => {
+                  const matched = blockMatchesModel(block, currentModel)
+                  const low = block.confidence !== null && block.confidence < 0.75
+                  return (
+                    <article
+                      key={`${kind}-${block.id}`}
+                      className={`docmap-block-item ${low ? 'low-confidence' : ''} ${!matched ? 'unmatched' : ''}`}
+                    >
+                      <div className="docmap-block-row">
+                        <span className={`docmap-pill type-${block.type}`}>{block.type}</span>
+                        <span className="docmap-pill">p{block.page}</span>
+                        <span className="docmap-pill conf">
+                          {block.confidence === null ? 'n/a' : block.confidence.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="docmap-title">{block.interpreted}</div>
+                      {block.excerpt && <div className="docmap-excerpt">{block.excerpt}</div>}
+                      {block.signals.length > 0 && (
+                        <div className="docmap-signals">
+                          {block.signals.map((signal, idx) => (
+                            <span key={`${block.id}-signal-${idx}`} className="docmap-signal">
+                              {signal}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </article>
+                  )
+                })
+              )}
+            </div>
+          </section>
+          <section className="docmap-summary">
+            <h4>Coverage</h4>
+            <div className="docmap-summary-grid">
+              <div className="docmap-summary-card">
+                <div className="docmap-summary-label">Matched blocks</div>
+                <div className="docmap-summary-value">{matchedCount}</div>
+              </div>
+              <div className="docmap-summary-card">
+                <div className="docmap-summary-label">Unmatched blocks</div>
+                <div className="docmap-summary-value">{Math.max(0, filteredBlocks.length - matchedCount)}</div>
+              </div>
+              <div className="docmap-summary-card">
+                <div className="docmap-summary-label">Low confidence</div>
+                <div className="docmap-summary-value">{lowConfidenceCount}</div>
+              </div>
+              <div className="docmap-summary-card">
+                <div className="docmap-summary-label">Source</div>
+                <div className="docmap-summary-value">{map.sourceLabel}</div>
+              </div>
+            </div>
+            <div className="docmap-cluster-counts">
+              {(Object.keys(clusterCounts) as ImportDocumentBlockType[]).map((type) => (
+                <span key={`${kind}-count-${type}`} className="docmap-count-pill">
+                  {type}: {clusterCounts[type]}
+                </span>
+              ))}
+            </div>
+          </section>
+        </div>
+      </section>
+    )
+  }
+
   async function handleImportDocumentFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
@@ -1094,6 +1354,16 @@ export default function App() {
     try {
       const content = await file.text()
       const payload = content.trim() || `Document: ${file.name}`
+      const parsedMap = parseDocumentMapHtml(payload, file.name)
+      if (parsedMap) {
+        setImportDocumentMapForSelectedVersion(docMapTargetKind, parsedMap)
+        setTab('import_map')
+        setHeaderNotice(
+          `${docMapTargetKind === 'contentMap' ? 'Content Map' : 'Imported Map'} loaded from HTML (${parsedMap.blocks.length} blocks).`,
+        )
+        return
+      }
+
       const result = importFromDocument(payload)
       if (result.ok) {
         setTab('import_map')
@@ -1222,7 +1492,18 @@ export default function App() {
           : 'Start New Import'
   const aiSidebarExpanded = aiAssistExpanded && sidebarVisible
   const workspaceClasses = `workspace ${!sidebarVisible ? 'sidebar-hidden' : ''} ${!inspectorVisible ? 'inspector-hidden' : ''} ${aiSidebarExpanded ? 'ai-expanded-horizontal' : ''}`
-
+  const documentMaps = useMemo(
+    () =>
+      selectedVersion
+        ? getImportDocumentMapsForSelectedVersion() ?? {
+            contentMap: null,
+            importedMap: null,
+          }
+        : null,
+    [selectedVersion, getImportDocumentMapsForSelectedVersion],
+  )
+  const activeContentMap = documentMaps?.contentMap ?? null
+  const activeImportedMap = documentMaps?.importedMap ?? null
   function runGoldImportFixture(fixture: GoldImportFixture): {
     metrics: ImportEvalMetrics
     model: CanonicalModel
@@ -1352,6 +1633,23 @@ export default function App() {
                   >
                     <option value="text">Text notes</option>
                     <option value="document">Document extract</option>
+                  </select>
+                </div>
+                <div className="menu-inline-control">
+                  <label htmlFor="docMapTargetKind" className="menu-inline-label">
+                    HTML map target
+                  </label>
+                  <select
+                    id="docMapTargetKind"
+                    className="menu-inline-select"
+                    value={docMapTargetKind}
+                    onChange={(event) =>
+                      setDocMapTargetKind(event.target.value as ImportDocumentMapKind)
+                    }
+                    disabled={importBusy}
+                  >
+                    <option value="importedMap">Imported Map</option>
+                    <option value="contentMap">Content Map</option>
                   </select>
                 </div>
                 <button type="button" className="menu-item" onClick={handleImportDraftBySelectedSource} disabled={importBusy}>
@@ -1909,6 +2207,23 @@ export default function App() {
                     </div>
                   )}
                 </section>
+
+                {selectedTab === 'import_map' && (
+                  <section className="docmap-stack">
+                    {renderDocumentMapPanel({
+                      kind: 'contentMap',
+                      map: activeContentMap,
+                      filter: docMapContentFilter,
+                      setFilter: setDocMapContentFilter,
+                    })}
+                    {renderDocumentMapPanel({
+                      kind: 'importedMap',
+                      map: activeImportedMap,
+                      filter: docMapImportedFilter,
+                      setFilter: setDocMapImportedFilter,
+                    })}
+                  </section>
+                )}
 
                 {mapActorBuckets.length === 0 ? (
                   <div className="canvas-empty">

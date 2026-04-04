@@ -12,6 +12,7 @@ import type {
   FlowNode,
   FlowNodeType,
   ImportDocumentMap,
+  ImportDocumentMapBundle,
   Origin,
   PMStore,
   ReviewState,
@@ -1238,23 +1239,41 @@ export const usePMStore = create<PMStore>((set, get) => ({
     return { ok: true, message: 'Cleared current version to a blank import draft.' }
   },
 
-  setImportDocumentMapForSelectedVersion: (documentMap) => {
+  setImportDocumentMapForSelectedVersion: (kind, documentMap) => {
     set((state) => {
       const next = clone(state)
       const ref = getCurrentVersionRef(next)
       if (!ref) return state
-      ref.version.importDocumentMap = documentMap ? clone(documentMap) : undefined
+      const existing = ref.version.importDocumentMaps
+      const bundle: ImportDocumentMapBundle = existing
+        ? clone(existing)
+        : {
+            contentMap: null,
+            importedMap: null,
+          }
+      bundle[kind] = documentMap ? clone(documentMap) : null
+      ref.version.importDocumentMaps = bundle
       ref.artifact.updatedAt = now()
       persist(next)
       return next
     })
   },
 
-  getImportDocumentMapForSelectedVersion: () => {
+  getImportDocumentMapForSelectedVersion: (kind) => {
     const state = get()
     const ref = getCurrentVersionRef(state)
     if (!ref) return null
-    return ref.version.importDocumentMap ? (clone(ref.version.importDocumentMap) as ImportDocumentMap) : null
+    const bundle = ref.version.importDocumentMaps
+    if (!bundle) return null
+    const map = bundle[kind]
+    return map ? (clone(map) as ImportDocumentMap) : null
+  },
+
+  getImportDocumentMapsForSelectedVersion: () => {
+    const state = get()
+    const ref = getCurrentVersionRef(state)
+    if (!ref || !ref.version.importDocumentMaps) return null
+    return clone(ref.version.importDocumentMaps)
   },
 
   importFromJson: (rawJson) => {
