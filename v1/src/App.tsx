@@ -306,6 +306,7 @@ type DraftSourceType = 'text' | 'document'
 type ImportStage = 'toc_seed' | 'detail_ingest' | 'review' | 'confirmed'
 type DocMapFilter = 'all' | ImportDocumentBlockType
 type ExternalAssistProvider = 'none' | 'gemini' | 'copilot'
+type GeminiAssistMode = 'toc_seed' | 'detail_steps' | 'ocr_cleanup'
 
 const DOCMAP_FILTER_OPTIONS: Array<{ id: DocMapFilter; label: string }> = [
   { id: 'all', label: 'All' },
@@ -314,6 +315,12 @@ const DOCMAP_FILTER_OPTIONS: Array<{ id: DocMapFilter; label: string }> = [
   { id: 'subprocess', label: 'Subprocess' },
   { id: 'fact', label: 'Fact' },
   { id: 'unclassified', label: 'Unclassified' },
+]
+
+const GEMINI_ASSIST_MODE_OPTIONS: Array<{ id: GeminiAssistMode; label: string }> = [
+  { id: 'toc_seed', label: 'TOC -> Clusters' },
+  { id: 'detail_steps', label: 'Chapter -> Steps' },
+  { id: 'ocr_cleanup', label: 'OCR cleanup only' },
 ]
 
 const IMPORT_STAGE_STEPS: Array<{
@@ -351,6 +358,9 @@ const UI_STORAGE_KEYS = {
   sidebarVisible: 'flowcraft.ui.sidebarVisible',
   inspectorVisible: 'flowcraft.ui.inspectorVisible',
   externalAssistProvider: 'flowcraft.ui.externalAssistProvider',
+  geminiApiKey: 'flowcraft.ui.geminiApiKey',
+  geminiModel: 'flowcraft.ui.geminiModel',
+  geminiAssistMode: 'flowcraft.ui.geminiAssistMode',
 } as const
 
 function readStoredBool(key: string, fallback: boolean): boolean {
@@ -369,6 +379,18 @@ function readStoredExternalAssistProvider(): ExternalAssistProvider {
   if (typeof window === 'undefined') return 'none'
   const raw = window.localStorage.getItem(UI_STORAGE_KEYS.externalAssistProvider)
   return raw === 'gemini' || raw === 'copilot' ? raw : 'none'
+}
+
+function readStoredString(key: string, fallback = ''): string {
+  if (typeof window === 'undefined') return fallback
+  return window.localStorage.getItem(key) ?? fallback
+}
+
+function readStoredGeminiAssistMode(): GeminiAssistMode {
+  if (typeof window === 'undefined') return 'detail_steps'
+  const raw = window.localStorage.getItem(UI_STORAGE_KEYS.geminiAssistMode)
+  if (raw === 'toc_seed' || raw === 'detail_steps' || raw === 'ocr_cleanup') return raw
+  return 'detail_steps'
 }
 
 function readStoredStructureCluster(): StructureCluster {
@@ -585,6 +607,104 @@ function normalizeOcrText(input: string): string {
   return stitched.join('\n').trim()
 }
 
+function guessGeminiAssistMode(text: string): GeminiAssistMode {
+  const trimmed = text.trim()
+  if (!trimmed) return 'detail_steps'
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const clusterLines = lines.filter((line) => /^cluster\s*:/i.test(line))
+  if (clusterLines.length >= 2) return 'toc_seed'
+  return 'detail_steps'
+}
+
+  async function callGeminiText(params: {
+    apiKey: string
+    model: string
+    mode: GeminiAssistMode
+    source: string
+  }): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+    const { apiKey, model, mode, source } = params
+    const prompt = source.trim()
+    if (!prompt) {
+      return { ok: false, error: 'No text provided for Gemini.' }
+    }
+
+    let instruction = ''
+    if (mode === 'toc_seed') {
+      instruction = [
+        'Extract top-level clusters from this input.',
+        'Return ONLY lines in this exact format:',
+        'Cluster: <cluster name>',
+        'No bullets, numbering, markdown, or commentary.',
+      ].join('\n')
+    } else if (mode === 'ocr_cleanup') {
+      instruction = [
+        'Clean OCR noise while preserving original meaning.',
+        'Return plain text only.',
+        'Fix line wraps and hyphenation artifacts.',
+      ].join('\n')
+    } else {
+      instruction = [
+        'Convert the input into concise process-step lines for map import.',
+        'Return plain text lines only.',
+        'Prefer: Start:, Decision:, and End: when appropriate.',
+      ].join('\n')
+    }
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [{ text: instruction }],
+          },
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: prompt }],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            topP: 0.9,
+            maxOutputTokens: 2048,
+          },
+        }),
+      },
+    )
+
+    if (!response.ok) {
+      const detail = await response.text()
+      return {
+        ok: false,
+        error: `Gemini request failed (${response.status}). ${detail.slice(0, 220)}`,
+      }
+    }
+
+    const payload = (await response.json()) as {
+      candidates?: Array<{
+        content?: {
+          parts?: Array<{ text?: string }>
+        }
+      }>
+    }
+    const text =
+      payload.candidates
+        ?.flatMap((candidate) => candidate.content?.parts ?? [])
+        .map((part) => part.text ?? '')
+        .join('\n')
+        .trim() ?? ''
+
+    if (!text) {
+      return { ok: false, error: 'Gemini returned empty content.' }
+    }
+    return { ok: true, text }
+  }
+
 function normalizeDocMapText(raw: string): string {
   return raw.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 }
@@ -786,6 +906,13 @@ export default function App() {
   const [externalAssistProvider, setExternalAssistProvider] = useState<ExternalAssistProvider>(
     () => readStoredExternalAssistProvider(),
   )
+  const [geminiApiKey, setGeminiApiKey] = useState(() => readStoredString(UI_STORAGE_KEYS.geminiApiKey))
+  const [geminiModel, setGeminiModel] = useState(
+    () => readStoredString(UI_STORAGE_KEYS.geminiModel, 'gemini-2.5-flash'),
+  )
+  const [geminiAssistMode, setGeminiAssistMode] = useState<GeminiAssistMode>(() =>
+    readStoredGeminiAssistMode(),
+  )
   const [externalAssistBusy, setExternalAssistBusy] = useState(false)
   const [docMapTargetKind, setDocMapTargetKind] = useState<ImportDocumentMapKind>('importedMap')
   const [docMapContentFilter, setDocMapContentFilter] = useState<DocMapFilter>('all')
@@ -909,6 +1036,21 @@ export default function App() {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(UI_STORAGE_KEYS.externalAssistProvider, externalAssistProvider)
   }, [externalAssistProvider])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(UI_STORAGE_KEYS.geminiApiKey, geminiApiKey)
+  }, [geminiApiKey])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(UI_STORAGE_KEYS.geminiModel, geminiModel)
+  }, [geminiModel])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(UI_STORAGE_KEYS.geminiAssistMode, geminiAssistMode)
+  }, [geminiAssistMode])
 
   useEffect(() => {
     if (!sidebarVisible && aiAssistExpanded) setAiAssistExpanded(false)
@@ -1633,10 +1775,7 @@ export default function App() {
       setHeaderNotice('Select Gemini or Copilot external assist first.')
       return
     }
-    setExternalAssistBusy(true)
-    try {
-      // Safe scaffold: normalize first, then route via existing AI assist path.
-      // Hook real provider calls here (backend proxy) when API integration is enabled.
+    if (externalAssistProvider === 'copilot') {
       const normalized = normalizeOcrText(aiPrompt)
       if (normalized) setAiPrompt(normalized)
       const result = importFromAiAssist(normalized || aiPrompt)
@@ -1646,9 +1785,53 @@ export default function App() {
           setImportStage('detail_ingest')
         }
       }
-      setHeaderNotice(
-        `${externalAssistProvider === 'gemini' ? 'Gemini' : 'Copilot'} scaffold run complete. ${result.message} (Direct API call not yet wired.)`,
-      )
+      setHeaderNotice(`Copilot assist path executed via local import flow. ${result.message}`)
+      return
+    }
+
+    const apiKey = geminiApiKey.trim()
+    const model = geminiModel.trim()
+    if (!apiKey) {
+      setHeaderNotice('Gemini API key missing. Add it in AI Assist first.')
+      return
+    }
+    if (!model) {
+      setHeaderNotice('Gemini model missing. Add a model like "gemini-2.5-flash".')
+      return
+    }
+
+    setExternalAssistBusy(true)
+    try {
+      const normalized = normalizeOcrText(aiPrompt)
+      const source = normalized || aiPrompt
+      const selectedMode = geminiAssistMode === 'detail_steps' ? guessGeminiAssistMode(source) : geminiAssistMode
+      const gemini = await callGeminiText({
+        apiKey,
+        model,
+        mode: selectedMode,
+        source,
+      })
+      if (!gemini.ok) {
+        setHeaderNotice(gemini.error)
+        return
+      }
+      const transformed = gemini.text.trim()
+      setAiPrompt(transformed)
+      if (selectedMode === 'ocr_cleanup') {
+        setHeaderNotice('Gemini OCR cleanup complete. Review text, then run import.')
+        return
+      }
+      const result = selectedMode === 'toc_seed' ? importFromText(transformed) : importFromAiAssist(transformed)
+      if (result.ok) {
+        setTab('import_map')
+        if (importStage === 'toc_seed' || importStage === 'confirmed') {
+          setImportStage('detail_ingest')
+        }
+      }
+      setHeaderNotice(`Gemini assist complete (${selectedMode}). ${result.message}`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Gemini assist failed.'
+      setHeaderNotice(message)
     } finally {
       setExternalAssistBusy(false)
     }
@@ -2043,18 +2226,57 @@ export default function App() {
                 value={externalAssistProvider}
                 onChange={(event) => setExternalAssistProvider(event.target.value as ExternalAssistProvider)}
                 disabled={!FEATURE_AVAILABILITY.aiAssist || externalAssistBusy}
-                title="External provider scaffold"
+                title="External AI provider"
               >
                 <option value="none">External AI: off</option>
                 <option value="gemini">External AI: Gemini</option>
                 <option value="copilot">External AI: Copilot (manual)</option>
               </select>
+              {externalAssistProvider === 'gemini' && (
+                <>
+                  <select
+                    className="menu-inline-select ai-provider-select"
+                    value={geminiAssistMode}
+                    onChange={(event) => setGeminiAssistMode(event.target.value as GeminiAssistMode)}
+                    disabled={!FEATURE_AVAILABILITY.aiAssist || externalAssistBusy}
+                    title="Gemini conversion mode"
+                  >
+                    {GEMINI_ASSIST_MODE_OPTIONS.map((mode) => (
+                      <option key={mode.id} value={mode.id}>
+                        {mode.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="password"
+                    className="ai-provider-input"
+                    value={geminiApiKey}
+                    onChange={(event) => setGeminiApiKey(event.target.value)}
+                    placeholder="Gemini API key"
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={!FEATURE_AVAILABILITY.aiAssist || externalAssistBusy}
+                    title="Stored in browser local storage"
+                  />
+                  <input
+                    type="text"
+                    className="ai-provider-input ai-provider-model"
+                    value={geminiModel}
+                    onChange={(event) => setGeminiModel(event.target.value)}
+                    placeholder="Gemini model"
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={!FEATURE_AVAILABILITY.aiAssist || externalAssistBusy}
+                    title="Example: gemini-2.5-flash"
+                  />
+                </>
+              )}
               <button
                 type="button"
                 className="ai-provider-go"
                 onClick={handleExternalAssistGenerate}
                 disabled={!FEATURE_AVAILABILITY.aiAssist || externalAssistBusy}
-                title="Run external assist scaffold"
+                title="Run external AI assist"
               >
                 {externalAssistBusy ? 'Running…' : 'Use External AI'}
               </button>
