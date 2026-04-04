@@ -238,6 +238,15 @@
   gap: 4px;
 }
 
+.menu-head {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #7a869a;
+  padding: 4px 8px;
+}
+
 .menu-item,
 .menu-file {
   width: 100%;
@@ -273,6 +282,30 @@
   inset: 0;
   opacity: 0;
   cursor: pointer;
+}
+
+.menu-select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+.menu-textarea {
+  width: 100%;
+  min-height: 72px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  resize: vertical;
+  padding: 8px 10px;
 }
 
 .btn.preview,

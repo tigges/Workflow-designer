@@ -84,6 +84,7 @@ const FEATURE_AVAILABILITY = {
 
 type EdgeMode = 'auto' | 'manual'
 type StructureCluster = 'projects' | 'artifacts' | 'versions' | null
+type DraftSourceType = 'text' | 'document'
 
 const UI_STORAGE_KEYS = {
   structureOpen: 'flowcraft.ui.structureOpen',
@@ -272,6 +273,7 @@ export default function App() {
   const [activeEdgeType, setActiveEdgeType] = useState<EdgeType>('sequential')
   const [edgeMode, setEdgeMode] = useState<EdgeMode>(() => readStoredEdgeMode())
   const [importTextDraft, setImportTextDraft] = useState('')
+  const [draftSourceType, setDraftSourceType] = useState<DraftSourceType>('text')
   const [importBusy, setImportBusy] = useState(false)
   const [importMenuOpen, setImportMenuOpen] = useState(false)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
@@ -625,6 +627,14 @@ export default function App() {
     if (result.ok) setImportTextDraft('')
   }
 
+  function handleImportDraftBySelectedSource() {
+    if (draftSourceType === 'document') {
+      handleImportDocumentFromDraft()
+      return
+    }
+    handleImportText()
+  }
+
   function handleImportDocumentFromDraft() {
     const result = importFromDocument(importTextDraft)
     setHeaderNotice(result.message)
@@ -751,11 +761,23 @@ export default function App() {
                   Import JSON file
                   <input type="file" accept="application/json" onChange={handleImportJson} disabled={importBusy} />
                 </label>
-                <button type="button" className="menu-item" onClick={handleImportText} disabled={importBusy}>
-                  Import from text draft
-                </button>
-                <button type="button" className="menu-item" onClick={handleImportDocumentFromDraft} disabled={importBusy}>
-                  Import document from draft
+                <div className="menu-inline-control">
+                  <label htmlFor="draftSourceType" className="menu-inline-label">
+                    Draft source type
+                  </label>
+                  <select
+                    id="draftSourceType"
+                    className="menu-inline-select"
+                    value={draftSourceType}
+                    onChange={(event) => setDraftSourceType(event.target.value as DraftSourceType)}
+                    disabled={importBusy}
+                  >
+                    <option value="text">Text notes</option>
+                    <option value="document">Document extract</option>
+                  </select>
+                </div>
+                <button type="button" className="menu-item" onClick={handleImportDraftBySelectedSource} disabled={importBusy}>
+                  Import draft ({draftSourceType === 'document' ? 'Document extract' : 'Text notes'})
                 </button>
                 <label className="menu-item">
                   Import document file
