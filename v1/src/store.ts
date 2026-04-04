@@ -203,6 +203,71 @@ function normalizeConfidence(value: unknown, fallback: number): number {
   return Math.max(0, Math.min(1, Number(value.toFixed(2))))
 }
 
+function parseTocSeedClusters(text: string): string[] | null {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  const contentLines = lines.filter((line) => !line.startsWith('#'))
+  if (contentLines.length < 3) return null
+
+  const clusters: string[] = []
+  const seen = new Set<string>()
+
+  for (const line of contentLines) {
+    const cleaned = line.replace(/^[-*]\s*/, '')
+    const match = cleaned.match(/^cluster\s*:\s*(.+)$/i)
+    if (!match) return null
+    const label = match[1].trim()
+    if (!label) continue
+    const key = label.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    clusters.push(label)
+  }
+
+  return clusters.length >= 3 ? clusters : null
+}
+
+function importModelFromTocSeed(clusters: string[], origin: Origin): CanonicalModel {
+  const model = emptyModel('TOC Seed Clusters')
+  model.confidence = { overall: 0.76, extraction: 0.78, synthesis: 0.74, validationPenalty: 0 }
+  model.validation = []
+
+  const nodes: FlowNode[] = clusters.map((cluster, index) => {
+    const id = mkId('n')
+    return {
+      id,
+      type: 'annotation',
+      label: `Cluster: ${cluster}`,
+      actor: '',
+      status: 'live',
+      metadata: {
+        stage: cluster,
+        touchpoint: `Cluster ${index + 1}`,
+      },
+      origin,
+      confidence: 0.78,
+      position: {
+        x: 160 + (index % 2) * 290,
+        y: 120 + Math.floor(index / 2) * 110,
+      },
+    }
+  })
+
+  model.nodes = nodes
+  model.edges = []
+  nodes.forEach((node) => {
+    model.projections.flow.nodePositions[node.id] = node.position
+    model.projections.map.nodePositions[node.id] = {
+      x: node.position.x * 0.9,
+      y: node.position.y * 0.7,
+    }
+  })
+  return model
+}
+
 function importModelFromText(text: string): CanonicalModel {
   const lines = text
     .split(/\r?\n/)
@@ -892,12 +957,25 @@ export const usePMStore = create<PMStore>((set, get) => ({
   importFromText: (text) => {
     const trimmed = text.trim()
     if (!trimmed) return { ok: false, message: 'Text import failed: empty input.' }
-    const imported = importModelFromText(trimmed)
+    const tocClusters = parseTocSeedClusters(trimmed)
+    const imported = tocClusters
+      ? importModelFromTocSeed(tocClusters, 'text_import')
+      : importModelFromText(trimmed)
     set((state) => {
-      const next = applyModelToSelectedVersion(state, imported)
+      const next = applyModelToSelectedVersion(
+        state,
+        imported,
+        tocClusters ? { preserveImportedValidation: true } : undefined,
+      )
       persist(next)
       return next
     })
+    if (tocClusters) {
+      return {
+        ok: true,
+        message: `TOC seed imported ${imported.nodes.length} clusters (no auto-connections).`,
+      }
+    }
     return {
       ok: true,
       message: `Text import generated ${imported.nodes.length} nodes and ${imported.edges.length} edges.`,
@@ -920,12 +998,26 @@ export const usePMStore = create<PMStore>((set, get) => ({
   },
 
   importFromAiAssist: (prompt: string) => {
-    const imported = importModelFromAiPrompt(prompt)
+    const trimmed = prompt.trim()
+    const tocClusters = trimmed ? parseTocSeedClusters(trimmed) : null
+    const imported = tocClusters
+      ? importModelFromTocSeed(tocClusters, 'ai_assist')
+      : importModelFromAiPrompt(prompt)
     set((state) => {
-      const next = applyModelToSelectedVersion(state, imported)
+      const next = applyModelToSelectedVersion(
+        state,
+        imported,
+        tocClusters ? { preserveImportedValidation: true } : undefined,
+      )
       persist(next)
       return next
     })
+    if (tocClusters) {
+      return {
+        ok: true,
+        message: `AI assist detected TOC seed and imported ${imported.nodes.length} clusters.`,
+      }
+    }
     return {
       ok: true,
       message: `AI assist generated ${imported.nodes.length} candidate nodes. Routed for review.`,
