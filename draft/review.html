@@ -64,6 +64,23 @@
           <div class="mini-arrow missing">No → (missing label)</div>
         </div>
 
+        <h3>ASCII Mini-Map Review</h3>
+        <pre class="ascii-map">
+[n1 Start]
+    |
+    v
+[n2 Triage] -----> [n3 Issue Type?]
+                      |Yes
+                      v
+                  [n7 Verified?] ---Yes---> [n10 Process Resolution] ---> [n11 Resolved]
+                      |
+                      +---No----> [n9 Request Proof]
+
+Review focus:
+- Edge c12: n7 -> n9 label missing (expected "No")
+- Decision n7: ensure both exits are explicit
+        </pre>
+
         <h3>Outcome</h3>
         <p class="muted">Approval routes this flow to published state and enables export/share.</p>
       </aside>
