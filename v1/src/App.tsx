@@ -661,45 +661,52 @@ export default function App() {
 
   const mapClusters = useMemo(() => {
     const nodes = currentModel?.nodes ?? []
+    const seededClusterLabelsFromGroups =
+      currentModel?.projections.map.groups
+        ?.map((group) => group.label.trim())
+        .filter((label) => label.length > 0) ?? []
+
+    const seededClusterLabelsFromAnnotations = nodes
+      .filter((node) => node.type === 'annotation')
+      .map((node) => node.label.match(/^cluster\s*:\s*(.+)$/i)?.[1]?.trim() ?? node.label.trim())
+      .filter((label) => label.length > 0)
+
+    const seededClusterLabels = [...new Set([...seededClusterLabelsFromGroups, ...seededClusterLabelsFromAnnotations])]
+
     const stageBuckets = new Map<string, FlowNode[]>()
     nodes.forEach((node) => {
       const stage = node.metadata.stage?.trim()
-      if (!stage) return
+      if (!stage || node.type === 'annotation') return
       const bucket = stageBuckets.get(stage) ?? []
       bucket.push(node)
       stageBuckets.set(stage, bucket)
     })
-    if (stageBuckets.size > 0) {
-      return [...stageBuckets.entries()].map(([name, bucket], index) => {
-        const mappedSteps = bucket.filter((node) => node.type !== 'annotation')
-        const preview = mappedSteps.slice(0, 2).map((node) => node.label)
-        const extra = mappedSteps.length - preview.length
-        return {
-          id: `cluster-${index}`,
-          name,
-          count: mappedSteps.length,
-          summary:
-            mappedSteps.length === 0
-              ? 'Cluster seeded. Waiting for detailed step allocation.'
-              : `${preview.join(' -> ')}${extra > 0 ? ` +${extra} more` : ''}`,
-        }
-      })
-    }
 
-    const seededClusterLabels = [
-      ...new Set(
-        nodes
-          .filter((node) => node.type === 'annotation')
-          .map((node) => node.label.trim())
-          .filter((label) => label.length > 0),
-      ),
-    ]
-    return seededClusterLabels.map((label, index) => ({
-      id: `seed-cluster-${index}`,
-      name: label,
-      count: 0,
-      summary: 'Seeded cluster. Waiting for detail import.',
-    }))
+    const clusterOrder =
+      seededClusterLabels.length > 0
+        ? [...seededClusterLabels]
+        : [...stageBuckets.keys()]
+
+    const missingAssignedClusters = [...stageBuckets.keys()].filter(
+      (stage) => !clusterOrder.some((label) => label.toLowerCase() === stage.toLowerCase()),
+    )
+    const allClusters = [...clusterOrder, ...missingAssignedClusters]
+
+    return allClusters.map((name, index) => {
+      const mappedSteps = stageBuckets.get(name) ?? []
+      const preview = mappedSteps.slice(0, 2).map((node) => node.label)
+      const extra = mappedSteps.length - preview.length
+      return {
+        id: `cluster-${index}`,
+        name,
+        count: mappedSteps.length,
+        isEmpty: mappedSteps.length === 0,
+        summary:
+          mappedSteps.length === 0
+            ? 'Cluster seeded. Waiting for detailed step allocation.'
+            : `${preview.join(' -> ')}${extra > 0 ? ` +${extra} more` : ''}`,
+      }
+    })
   }, [currentModel])
 
   function handleCreateProject() {
@@ -1750,7 +1757,7 @@ export default function App() {
                         </div>
                       ) : (
                         mapClusters.map((cluster) => (
-                          <article key={cluster.id} className="map-cluster-chip">
+                          <article key={cluster.id} className={`map-cluster-chip ${cluster.isEmpty ? 'is-empty' : ''}`}>
                             <h4>{cluster.name}</h4>
                             <p>{cluster.summary}</p>
                             <span className="count-pill">{cluster.count} mapped</span>

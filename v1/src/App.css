@@ -1672,6 +1672,12 @@
   padding: 8px 10px;
 }
 
+.map-cluster-chip.is-empty {
+  opacity: 0.62;
+  border-style: dashed;
+  background: #f7f9fd;
+}
+
 .map-cluster-chip h4 {
   margin: 0 0 3px;
   font-size: 12px;

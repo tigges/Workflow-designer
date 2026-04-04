@@ -274,6 +274,11 @@ function importModelFromTocSeed(clusters: string[], origin: Origin): CanonicalMo
 
   model.nodes = nodes
   model.edges = []
+  model.projections.map.groups = clusters.map((cluster, index) => ({
+    id: `cluster-${index}`,
+    label: cluster,
+    nodeIds: [],
+  }))
   nodes.forEach((node) => {
     model.projections.flow.nodePositions[node.id] = node.position
     model.projections.map.nodePositions[node.id] = {
@@ -363,6 +368,13 @@ function assignStagesFromSeedClusters(model: CanonicalModel, clusters: string[])
       },
     }
   })
+  mapped.projections.map.groups = normalizedClusters.map((cluster, index) => ({
+    id: `cluster-${index}`,
+    label: cluster,
+    nodeIds: mapped.nodes
+      .filter((node) => node.metadata.stage === cluster && node.type !== 'annotation')
+      .map((node) => node.id),
+  }))
   return mapped
 }
 
