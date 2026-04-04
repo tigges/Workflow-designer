@@ -68,11 +68,11 @@ const NODE_TYPE_OPTIONS: Array<{
   { value: 'annotation', label: 'Annotation', desc: 'Context note' },
 ]
 
-const EDGE_OPTIONS: Array<{ value: EdgeType; label: string }> = [
-  { value: 'sequential', label: 'Sequential' },
-  { value: 'conditional', label: 'Conditional' },
-  { value: 'parallel', label: 'Parallel' },
-  { value: 'fallback', label: 'Fallback' },
+const EDGE_OPTIONS: Array<{ value: EdgeType; label: string; lineHint: string; arrowHint: string }> = [
+  { value: 'sequential', label: 'Sequential', lineHint: 'Solid line', arrowHint: 'Closed arrow' },
+  { value: 'conditional', label: 'Conditional', lineHint: 'Dashed line', arrowHint: 'Diamond arrow' },
+  { value: 'parallel', label: 'Parallel', lineHint: 'Dotted line', arrowHint: 'Double arrow' },
+  { value: 'fallback', label: 'Fallback', lineHint: 'Long-dash line', arrowHint: 'Open arrow' },
 ]
 
 const ACTOR_OPTIONS: Array<{ value: Actor; label: string }> = [
@@ -227,6 +227,55 @@ function toRFEdge(edge: FlowEdge): Edge {
       fillOpacity: 0.9,
     },
   }
+}
+
+function EdgeTypePreview({ type }: { type: EdgeType }) {
+  const stroke = edgeStroke(type)
+  const lineDash =
+    type === 'conditional'
+      ? '6 4'
+      : type === 'parallel'
+        ? '2 3'
+        : type === 'fallback'
+          ? '10 5'
+          : undefined
+
+  return (
+    <svg className="ct-preview-svg" viewBox="0 0 44 14" aria-hidden>
+      <line
+        x1="2"
+        y1="7"
+        x2="30"
+        y2="7"
+        stroke={stroke}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray={lineDash}
+      />
+      {type === 'conditional' && (
+        <polygon points="36,7 33,4 30,7 33,10" fill={stroke} />
+      )}
+      {type === 'parallel' && (
+        <>
+          <polygon points="31,7 27,4 27,10" fill={stroke} />
+          <polygon points="37,7 33,4 33,10" fill={stroke} />
+        </>
+      )}
+      {type === 'fallback' && (
+        <polyline
+          points="30,4 36,7 30,10"
+          fill="none"
+          stroke={stroke}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+      {type === 'sequential' && (
+        <polygon points="38,7 31,3 31,11" fill={stroke} />
+      )}
+    </svg>
+  )
 }
 
 export default function App() {
@@ -948,19 +997,33 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <div className="ct-grid">
-              {EDGE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  className={`ct-btn ${activeEdgeType === opt.value ? 'active' : ''}`}
-                  data-ct={opt.value}
-                  onClick={() => setActiveEdgeType(opt.value)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+            {edgeMode === 'manual' ? (
+              <div className="ct-grid">
+                {EDGE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={`ct-btn ${activeEdgeType === opt.value ? 'active' : ''}`}
+                    data-ct={opt.value}
+                    onClick={() => setActiveEdgeType(opt.value)}
+                  >
+                    <span className="ct-preview-wrap">
+                      <EdgeTypePreview type={opt.value} />
+                    </span>
+                    <span className="ct-copy">
+                      <span className="ct-label">{opt.label}</span>
+                      <span className="ct-meta">
+                        {opt.lineHint} • {opt.arrowHint}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="ct-collapsed-note">
+                Auto mode is on. Connection type, line style, and arrow style are inferred from node context.
+              </div>
+            )}
           </section>
 
           <section className="sb-sec collapsible">
@@ -1177,12 +1240,8 @@ export default function App() {
                   fitView
                 >
                   <Background gap={24} color="#e6eaf1" />
-                  {!inspectorVisible && (
-                    <>
-                      <MiniMap className="floating-minimap" position="bottom-right" />
-                      <Controls className="floating-controls" position="bottom-left" />
-                    </>
-                  )}
+                  {!inspectorVisible && <MiniMap className="floating-minimap" position="bottom-right" />}
+                  <Controls className="floating-controls" position="bottom-left" />
                 </ReactFlow>
               ) : (
                 <div className="canvas-empty">
