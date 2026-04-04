@@ -51,11 +51,11 @@ Manual test notes for reviewer:
 
 ## Phase 5 — Journey Map projection
 
-- [ ] Journey Map tab renders phase/touchpoint view
-- [ ] Same node IDs used in flow and map
-- [ ] Shared fields sync both tabs
-- [ ] Layout metadata isolated per projection
-- [ ] No data drift between tabs after edits
+- [x] Journey Map tab renders phase/touchpoint view
+- [x] Same node IDs used in flow and map
+- [x] Shared fields sync both tabs
+- [x] Layout metadata isolated per projection
+- [x] No data drift between tabs after edits
 
 ## Phase 6 — Import modes (incl. doc import adapter)
 

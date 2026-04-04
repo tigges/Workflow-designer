@@ -175,9 +175,21 @@ export default function App() {
     createVersion(selectedArtifactId, name)
   }
 
-  function handleAddNode() {
+  function handleAddNode(type: FlowNode['type'] = 'process') {
     if (!currentModel) return
-    addNodeToCurrentVersion(buildDefaultNode(currentModel.nodes.length))
+    const node = buildDefaultNode(currentModel.nodes.length)
+    node.type = type
+    node.label =
+      type === 'decision'
+        ? 'Decision?'
+        : type === 'terminal'
+          ? 'Terminal'
+          : type === 'data'
+            ? 'Data / System'
+            : type === 'annotation'
+              ? 'Note'
+              : 'Process Step'
+    addNodeToCurrentVersion(node)
   }
 
   function handleConnect(conn: Connection) {
@@ -286,6 +298,29 @@ export default function App() {
               ))}
             </div>
           </div>
+
+          <div className="group">
+            <div className="group-head">
+              <h3>Node Types</h3>
+            </div>
+            <div className="list">
+              <button type="button" className="list-item" onClick={() => handleAddNode('process')} disabled={!selectedVersion || selectedTab !== 'flow'}>
+                + Process
+              </button>
+              <button type="button" className="list-item" onClick={() => handleAddNode('decision')} disabled={!selectedVersion || selectedTab !== 'flow'}>
+                + Decision
+              </button>
+              <button type="button" className="list-item" onClick={() => handleAddNode('terminal')} disabled={!selectedVersion || selectedTab !== 'flow'}>
+                + Terminal
+              </button>
+              <button type="button" className="list-item" onClick={() => handleAddNode('data')} disabled={!selectedVersion || selectedTab !== 'flow'}>
+                + Data / System
+              </button>
+              <button type="button" className="list-item" onClick={() => handleAddNode('annotation')} disabled={!selectedVersion || selectedTab !== 'flow'}>
+                + Annotation
+              </button>
+            </div>
+          </div>
         </aside>
 
         <section className="panel center-panel">
@@ -307,10 +342,10 @@ export default function App() {
             <button
               type="button"
               className="btn small"
-              onClick={handleAddNode}
+              onClick={() => handleAddNode('process')}
               disabled={!selectedVersion || selectedTab !== 'flow'}
             >
-              + Node
+              + Process Node
             </button>
             <span className="flow-help">Tip: drag from node handle to connect</span>
           </div>

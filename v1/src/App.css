@@ -103,6 +103,33 @@
   padding-top: 8px;
 }
 
+.palette-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.palette-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid #d7dce5;
+  background: #ffffff;
+  border-radius: 7px;
+  padding: 7px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.palette-item .kind {
+  font-size: 10px;
+  color: #647189;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 .group-head {
   display: flex;
   align-items: center;
@@ -185,6 +212,12 @@
 .flow-help-text {
   font-size: 11px;
   color: #647189;
+}
+
+.flow-help-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .canvas-empty {
