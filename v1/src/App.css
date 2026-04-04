@@ -407,3 +407,128 @@
   border: 1px solid #c4ccdb;
   background: #fff;
 }
+
+.flow-node-view {
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 142px;
+  background: #fff;
+  border: 1.4px solid #a9bde866;
+  border-left-width: 3px;
+  color: #1a1d23;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.flow-node-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.flow-node-meta {
+  font-size: 10px;
+  color: #647189;
+}
+
+.flow-handle {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid #b5bfd3;
+  background: #ffffff;
+}
+
+.hint-overlay {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid #c7d7f8;
+  background: #edf3ff;
+  color: #234fbb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.map-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow: auto;
+}
+
+.map-header h3 {
+  margin: 0 0 4px;
+}
+
+.map-header p {
+  margin: 0;
+  color: #647189;
+  font-size: 12px;
+}
+
+.lane-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lane {
+  border: 1px solid #d7dce5;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.lane-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #647189;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.lane-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lane-node {
+  border: 1px solid #d7dce5;
+  border-radius: 8px;
+  background: #f9fbff;
+  padding: 7px 9px;
+  font-size: 11px;
+  min-width: 110px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lane-node.process {
+  border-left: 3px solid #2d6ef5;
+}
+
+.lane-node.decision {
+  border-left: 3px solid #8b45d4;
+}
+
+.lane-node.terminal {
+  border-left: 3px solid #0f9e6e;
+}
+
+.lane-node.data {
+  border-left: 3px solid #d4720f;
+}
+
+.lane-node.annotation {
+  border-left: 3px solid #8a94a6;
+}

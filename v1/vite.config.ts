@@ -7,5 +7,7 @@ export default defineConfig({
   server: {
     // Allow cloud preview hosts used by remote dev environments.
     allowedHosts: true,
+    port: 5177,
+    strictPort: true,
   },
 })

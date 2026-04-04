@@ -162,6 +162,21 @@ export default function App() {
 
   const canUndo = history.length > 1 && historyIndex > 0
   const hasFlowData = (currentModel?.nodes.length ?? 0) > 0
+  const mapActorBuckets = useMemo(() => {
+    const nodes = currentModel?.nodes ?? []
+    const bucketOrder: Actor[] = ['customer', 'agent', 'system', 'manager', 'external', '']
+    const buckets = bucketOrder
+      .map((actor) => ({
+        actor: actor || 'unassigned',
+        label:
+          actor === ''
+            ? 'Unassigned'
+            : actor.charAt(0).toUpperCase() + actor.slice(1),
+        items: nodes.filter((node) => (node.actor || '') === actor),
+      }))
+      .filter((bucket) => bucket.items.length > 0)
+    return buckets
+  }, [currentModel])
 
   function handleCreateProject() {
     const name = window.prompt('Project name', `Project ${projects.length + 1}`)
@@ -222,7 +237,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand">
           <span className="brand-dot" />
-          ProcessMap V1
+          flowcraft
         </div>
         <div className="top-actions">
           <button type="button" className="btn ghost" onClick={undoCurrentVersion} disabled={!canUndo}>
@@ -345,7 +360,7 @@ export default function App() {
               className={`tab ${selectedTab === 'map' ? 'active' : ''}`}
               onClick={() => setTab('map')}
             >
-              Journey Map (Phase 5)
+              Journey Map
             </button>
             <button
               type="button"
@@ -399,10 +414,41 @@ export default function App() {
             </div>
           ) : (
             <div className="canvas">
-              <div className="canvas-empty">
-                <h3>Journey Map in Phase 5</h3>
-                <p>Phase 4 focuses on fully functional Journey Flow editing.</p>
-              </div>
+              {selectedVersion ? (
+                <div className="map-view">
+                  <div className="map-header">
+                    <h3>Journey Map Projection</h3>
+                    <p>Phase 5 view of the same canonical model, grouped by actor lanes.</p>
+                  </div>
+                  {mapActorBuckets.length === 0 ? (
+                    <div className="canvas-empty">
+                      <h3>No mapped steps yet</h3>
+                      <p>Add nodes in Journey Flow and assign actor values to populate this map.</p>
+                    </div>
+                  ) : (
+                    <div className="lane-list">
+                      {mapActorBuckets.map((bucket) => (
+                        <section key={bucket.actor} className="lane">
+                          <div className="lane-title">{bucket.label}</div>
+                          <div className="lane-items">
+                            {bucket.items.map((node) => (
+                              <article key={node.id} className={`lane-node ${node.type}`}>
+                                <strong>{node.label}</strong>
+                                <span>{node.type}</span>
+                              </article>
+                            ))}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="canvas-empty">
+                  <h3>No version selected</h3>
+                  <p>Select or create artifact/version to view the Journey Map.</p>
+                </div>
+              )}
             </div>
           )}
         </section>
