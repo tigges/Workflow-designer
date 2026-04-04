@@ -1418,13 +1418,22 @@
 }
 
 .fnode-card.kind-decision .fnode-label {
-  font-size: 10px;
-  line-height: 1.25;
-  max-width: 96px;
+  max-width: 100px;
 }
 
 .fnode-card.kind-decision .fnode-meta {
   margin-top: 6px;
+}
+
+.fnode-card.kind-decision .fnode-title {
+  font-size: 10px;
+  line-height: 1.22;
+  -webkit-line-clamp: 2;
+}
+
+.fnode-card.kind-decision .fnode-note {
+  font-size: 9px;
+  -webkit-line-clamp: 2;
 }
 
 .fnode-card.kind-terminal {
@@ -1466,9 +1475,34 @@
 }
 
 .fnode-label {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: center;
+}
+
+.fnode-title {
   font-size: 11.5px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fnode-note {
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .fnode-icon {
@@ -1847,16 +1881,19 @@
 }
 
 .field-group input,
-.field-group select {
+.field-group select,
+.field-group textarea {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface2);
   padding: 7px 8px;
   font-size: 12px;
+  font-family: inherit;
 }
 
 .field-group input:focus,
-.field-group select:focus {
+.field-group select:focus,
+.field-group textarea:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(45, 110, 245, 0.1);

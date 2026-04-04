@@ -45,6 +45,8 @@ import type {
 
 type RFNodeData = {
   label: string
+  title: string
+  note: string
   actor: Actor
   kind: FlowNode['type']
   status: FlowNode['status']
@@ -236,6 +238,40 @@ function terminalRole(node: FlowNode): 'start' | 'end' | null {
   return null
 }
 
+function splitNodeCopy(label: string): { title: string; note: string } {
+  const normalized = label.trim()
+  if (!normalized) return { title: 'Untitled step', note: '' }
+
+  const lines = normalized
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (lines.length >= 2) {
+    return {
+      title: lines[0],
+      note: lines.slice(1).join(' '),
+    }
+  }
+
+  const byDelimiter = normalized.match(/^(.{10,90}?)(?:\s*[;:]\s+|\s+[-–—]\s+)(.+)$/)
+  if (byDelimiter) {
+    return {
+      title: byDelimiter[1].trim(),
+      note: byDelimiter[2].trim(),
+    }
+  }
+
+  if (normalized.length <= 72) return { title: normalized, note: '' }
+  const splitIndex = normalized.lastIndexOf(' ', 72)
+  if (splitIndex <= 20) {
+    return { title: normalized.slice(0, 72).trim(), note: normalized.slice(72).trim() }
+  }
+  return {
+    title: normalized.slice(0, splitIndex).trim(),
+    note: normalized.slice(splitIndex + 1).trim(),
+  }
+}
+
 function inferEdgeType(
   sourceNode: FlowNode | undefined,
   targetNode: FlowNode | undefined,
@@ -259,7 +295,10 @@ function FlowNodeView({ data }: NodeProps<Node<RFNodeData>>) {
       title={data.label}
     >
       <div className={`fnode-status-dot status-${data.status}`} />
-      <div className="fnode-label">{data.label}</div>
+      <div className="fnode-label">
+        <div className="fnode-title">{data.title}</div>
+        {data.note && <div className="fnode-note">{data.note}</div>}
+      </div>
       <div className="fnode-meta">
         <span className={`actor-pill actor-${actorText(data.actor)}`}>{actorLabel(data.actor)}</span>
       </div>
@@ -272,12 +311,15 @@ function FlowNodeView({ data }: NodeProps<Node<RFNodeData>>) {
 }
 
 function toRFNode(node: FlowNode): Node<RFNodeData> {
+  const copy = splitNodeCopy(node.label)
   return {
     id: node.id,
     position: node.position,
     type: 'workflowNode',
     data: {
       label: node.label,
+      title: copy.title,
+      note: copy.note,
       actor: node.actor,
       kind: node.type,
       status: node.status,
@@ -1833,9 +1875,9 @@ export default function App() {
               <p className="muted">Selected node: {selectedNode.id}</p>
               <div className="field-group">
                 <label htmlFor="nodeLabel">Label</label>
-                <input
+                <textarea
                   id="nodeLabel"
-                  type="text"
+                  rows={5}
                   value={selectedNode.label}
                   onChange={(event) => updateNodeLabel(selectedNode.id, event.target.value)}
                 />
