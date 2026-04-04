@@ -1407,13 +1407,24 @@
 }
 
 .fnode-card.kind-decision {
-  width: 120px;
-  height: 80px;
+  width: 170px;
+  height: 140px;
   clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
   border: 1.5px solid #f1bd3d;
   border-left-width: 1.5px;
   border-left-color: #f1bd3d;
   background: #fff8e8;
+  padding: 22px 28px;
+}
+
+.fnode-card.kind-decision .fnode-label {
+  font-size: 10px;
+  line-height: 1.25;
+  max-width: 96px;
+}
+
+.fnode-card.kind-decision .fnode-meta {
+  margin-top: 6px;
 }
 
 .fnode-card.kind-terminal {

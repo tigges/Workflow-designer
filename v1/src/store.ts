@@ -135,8 +135,24 @@ function emptyModel(title: string): CanonicalModel {
 
 function actorFromText(text: string): Actor {
   const lower = text.toLowerCase()
-  if (lower.includes('customer') || lower.includes('user') || lower.includes('client')) return 'customer'
-  if (lower.includes('agent') || lower.includes('support') || lower.includes('advisor')) return 'agent'
+  if (
+    lower.includes('customer') ||
+    lower.includes('user') ||
+    lower.includes('client') ||
+    lower.includes('player')
+  ) {
+    return 'customer'
+  }
+  if (
+    lower.includes('agent') ||
+    lower.includes('support') ||
+    lower.includes('advisor') ||
+    lower.includes('finance') ||
+    lower.includes('cashier') ||
+    lower.includes('kyc')
+  ) {
+    return 'agent'
+  }
   if (lower.includes('system') || lower.includes('service') || lower.includes('backend')) return 'system'
   if (lower.includes('manager') || lower.includes('supervisor') || lower.includes('lead')) return 'manager'
   if (lower.includes('partner') || lower.includes('vendor') || lower.includes('external')) return 'external'
@@ -266,6 +282,88 @@ function importModelFromTocSeed(clusters: string[], origin: Origin): CanonicalMo
     }
   })
   return model
+}
+
+function extractSeedClustersFromModel(model: CanonicalModel): string[] {
+  const directClusters = model.nodes
+    .filter((node) => node.type === 'annotation')
+    .map((node) => {
+      const match = node.label.match(/^cluster\s*:\s*(.+)$/i)
+      return match ? match[1].trim() : null
+    })
+    .filter((value): value is string => Boolean(value))
+
+  if (directClusters.length > 0) return directClusters
+
+  const stageClusters = model.nodes
+    .map((node) => node.metadata.stage?.trim())
+    .filter((value): value is string => Boolean(value))
+
+  return [...new Set(stageClusters)]
+}
+
+function keywordScore(text: string, keyword: string): number {
+  if (keyword.length < 3) return 0
+  return text.includes(keyword) ? keyword.length : 0
+}
+
+function assignStagesFromSeedClusters(model: CanonicalModel, clusters: string[]): CanonicalModel {
+  if (clusters.length === 0) return model
+  const normalizedClusters = [...new Set(clusters.map((cluster) => cluster.trim()).filter(Boolean))]
+  if (normalizedClusters.length === 0) return model
+
+  const clusterKeywords = normalizedClusters.map((cluster) => {
+    const words = cluster
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length >= 3)
+    return {
+      cluster,
+      keywords: [...new Set(words)],
+    }
+  })
+  const unassigned =
+    normalizedClusters.find((cluster) => cluster.toLowerCase().includes('unassigned')) ?? 'Unassigned'
+
+  const mapped = clone(model)
+  mapped.nodes = mapped.nodes.map((node) => {
+    if (node.type === 'annotation' && /^cluster\s*:/i.test(node.label)) return node
+    const lower = node.label.toLowerCase()
+    let bestCluster = unassigned
+    let bestScore = 0
+
+    clusterKeywords.forEach(({ cluster, keywords }) => {
+      const score = keywords.reduce((sum, keyword) => sum + keywordScore(lower, keyword), 0)
+      if (score > bestScore) {
+        bestScore = score
+        bestCluster = cluster
+      }
+    })
+
+    if (bestScore === 0) {
+      if (/(withdraw|cashier|arn|payout)/.test(lower)) {
+        const withdrawalsCluster = normalizedClusters.find((cluster) =>
+          /withdraw|cashier/i.test(cluster),
+        )
+        if (withdrawalsCluster) bestCluster = withdrawalsCluster
+      } else if (/(deposit|payment|card|bank)/.test(lower)) {
+        const paymentsCluster = normalizedClusters.find((cluster) => /deposit|payment/i.test(cluster))
+        if (paymentsCluster) bestCluster = paymentsCluster
+      } else if (/(fraud|risk|verification|kyc)/.test(lower)) {
+        const riskCluster = normalizedClusters.find((cluster) => /risk|verification/i.test(cluster))
+        if (riskCluster) bestCluster = riskCluster
+      }
+    }
+
+    return {
+      ...node,
+      metadata: {
+        ...node.metadata,
+        stage: bestCluster,
+      },
+    }
+  })
+  return mapped
 }
 
 function importModelFromText(text: string): CanonicalModel {
@@ -983,7 +1081,10 @@ export const usePMStore = create<PMStore>((set, get) => ({
     const tocClusters = parseTocSeedClusters(trimmed)
     const imported = tocClusters
       ? importModelFromTocSeed(tocClusters, 'text_import')
-      : importModelFromText(trimmed)
+      : assignStagesFromSeedClusters(
+          importModelFromText(trimmed),
+          extractSeedClustersFromModel(snapshotCurrentModel(get()) ?? emptyModel('')),
+        )
     set((state) => {
       const next = applyModelToSelectedVersion(
         state,
@@ -1008,7 +1109,10 @@ export const usePMStore = create<PMStore>((set, get) => ({
   importFromDocument: (payload) => {
     const trimmed = payload.trim()
     if (!trimmed) return { ok: false, message: 'Document import failed: no extractable text found.' }
-    const imported = importModelFromDoc(trimmed)
+    const imported = assignStagesFromSeedClusters(
+      importModelFromDoc(trimmed),
+      extractSeedClustersFromModel(snapshotCurrentModel(get()) ?? emptyModel('')),
+    )
     set((state) => {
       const next = applyModelToSelectedVersion(state, imported)
       persist(next)
@@ -1028,13 +1132,32 @@ export const usePMStore = create<PMStore>((set, get) => ({
     const imported = tocClusters
       ? importModelFromTocSeed(tocClusters, 'ai_assist')
       : structuredStepImport
-        ? applyAiAssistSignature(importModelFromText(trimmed), 'AI Assisted Structured Import', {
+        ? applyAiAssistSignature(
+            assignStagesFromSeedClusters(
+              importModelFromText(trimmed),
+              extractSeedClustersFromModel(snapshotCurrentModel(get()) ?? emptyModel('')),
+            ),
+            'AI Assisted Structured Import',
+            {
+              overall: 0.63,
+              extraction: 0.66,
+              synthesis: 0.64,
+              validationPenalty: 0,
+            },
+          )
+      : applyAiAssistSignature(
+          assignStagesFromSeedClusters(
+            importModelFromAiPrompt(prompt),
+            extractSeedClustersFromModel(snapshotCurrentModel(get()) ?? emptyModel('')),
+          ),
+          'AI Assisted Candidate',
+          {
             overall: 0.63,
             extraction: 0.66,
             synthesis: 0.64,
             validationPenalty: 0,
-          })
-      : importModelFromAiPrompt(prompt)
+          },
+        )
     set((state) => {
       const next = applyModelToSelectedVersion(
         state,

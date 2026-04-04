@@ -252,6 +252,7 @@ function FlowNodeView({ data }: NodeProps<Node<RFNodeData>>) {
   return (
     <div
       className={`fnode-card kind-${data.kind} ${data.terminalRole ? `terminal-${data.terminalRole}` : ''}`}
+      title={data.label}
     >
       <div className={`fnode-status-dot status-${data.status}`} />
       <div className="fnode-label">{data.label}</div>
