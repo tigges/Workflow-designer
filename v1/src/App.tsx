@@ -103,6 +103,7 @@ const UI_STORAGE_KEYS = {
   previewOpen: 'flowcraft.ui.previewOpen',
   structureCluster: 'flowcraft.ui.structureCluster',
   edgeMode: 'flowcraft.ui.edgeMode',
+  sidebarVisible: 'flowcraft.ui.sidebarVisible',
   inspectorVisible: 'flowcraft.ui.inspectorVisible',
 } as const
 
@@ -333,6 +334,9 @@ export default function App() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [headerNotice, setHeaderNotice] = useState('')
+  const [sidebarVisible, setSidebarVisible] = useState(() =>
+    readStoredBool(UI_STORAGE_KEYS.sidebarVisible, true),
+  )
   const [inspectorVisible, setInspectorVisible] = useState(() =>
     readStoredBool(UI_STORAGE_KEYS.inspectorVisible, true),
   )
@@ -424,6 +428,11 @@ export default function App() {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(UI_STORAGE_KEYS.edgeMode, edgeMode)
   }, [edgeMode])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    writeStoredBool(UI_STORAGE_KEYS.sidebarVisible, sidebarVisible)
+  }, [sidebarVisible])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -949,8 +958,10 @@ export default function App() {
         </div>
       </header>
 
-      <main className={`workspace ${inspectorVisible ? '' : 'inspector-hidden'}`}>
-        <aside className="sidebar">
+      <main
+        className={`workspace ${!sidebarVisible ? 'sidebar-hidden' : ''} ${inspectorVisible ? '' : 'inspector-hidden'}`}
+      >
+        <aside className={`sidebar ${!sidebarVisible ? 'hidden' : ''}`}>
           <section className={`ai-panel ai-top ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-section' : ''}`}>
             <div className="ai-panel-header">
               <div className="ai-badge">
@@ -1218,6 +1229,17 @@ export default function App() {
             >
               + Process Node
             </button>
+            <div className="sidebar-toggle-wrap" role="group" aria-label="Sidebar visibility">
+              <button
+                type="button"
+                className={`dock-btn ${sidebarVisible ? 'active' : ''}`}
+                onClick={() => setSidebarVisible((current) => !current)}
+                aria-pressed={sidebarVisible}
+                title="Toggle sidebar"
+              >
+                Menu
+              </button>
+            </div>
             <div className="inspector-toggle-wrap" role="group" aria-label="Inspector visibility">
               <button
                 type="button"
