@@ -273,6 +273,8 @@ export default function App() {
   const [edgeMode, setEdgeMode] = useState<EdgeMode>(() => readStoredEdgeMode())
   const [importTextDraft, setImportTextDraft] = useState('')
   const [importBusy, setImportBusy] = useState(false)
+  const [importMenuOpen, setImportMenuOpen] = useState(false)
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [headerNotice, setHeaderNotice] = useState('')
   const [structureOpen, setStructureOpen] = useState(() =>
@@ -672,6 +674,27 @@ export default function App() {
     setHeaderNotice(result.message)
   }
 
+  function toggleImportMenu() {
+    setImportMenuOpen((open) => {
+      const next = !open
+      if (next) setExportMenuOpen(false)
+      return next
+    })
+  }
+
+  function toggleExportMenu() {
+    setExportMenuOpen((open) => {
+      const next = !open
+      if (next) setImportMenuOpen(false)
+      return next
+    })
+  }
+
+  function closeHeaderMenus() {
+    setImportMenuOpen(false)
+    setExportMenuOpen(false)
+  }
+
   function handlePreviewClick(event: MouseEvent, featureName: string) {
     event.preventDefault()
     setHeaderNotice(`${featureName} is visible in preview style and not usable yet.`)
@@ -717,29 +740,54 @@ export default function App() {
           {!FEATURE_AVAILABILITY.templates && <span className="preview-pill">Preview</span>}
         </div>
         <div className="header-right">
+          <div className="menu-wrap">
+            <button type="button" className="btn" onClick={toggleImportMenu} aria-expanded={importMenuOpen}>
+              Import
+            </button>
+            {importMenuOpen && (
+              <div className="menu-pop" onMouseLeave={closeHeaderMenus}>
+                <div className="menu-head">Import options</div>
+                <label className="menu-item">
+                  Import JSON file
+                  <input type="file" accept="application/json" onChange={handleImportJson} disabled={importBusy} />
+                </label>
+                <button type="button" className="menu-item" onClick={handleImportText} disabled={importBusy}>
+                  Import from text draft
+                </button>
+                <button type="button" className="menu-item" onClick={handleImportDocumentFromDraft} disabled={importBusy}>
+                  Import document from draft
+                </button>
+                <label className="menu-item">
+                  Import document file
+                  <input
+                    type="file"
+                    accept=".txt,.md,.csv,.json,.doc,.docx,.pdf"
+                    onChange={handleImportDocumentFile}
+                    disabled={importBusy}
+                  />
+                </label>
+              </div>
+            )}
+          </div>
           <button type="button" className="btn" onClick={handleValidateClick}>
             Validate
           </button>
-          <button type="button" className="btn" onClick={handleExportJson}>
-            Export JSON
-          </button>
-          <button type="button" className="btn primary" onClick={handleExportSvg}>
-            Export SVG
-          </button>
-          <label
-            className={`btn import-btn ${!FEATURE_AVAILABILITY.importJson ? 'preview-feature' : ''}`}
-            onClick={(event) => {
-              if (!FEATURE_AVAILABILITY.importJson) handlePreviewClick(event, 'Import JSON')
-            }}
-          >
-            Import JSON
-            <input
-              type="file"
-              accept="application/json"
-              onChange={handleImportJson}
-              disabled={!FEATURE_AVAILABILITY.importJson}
-            />
-          </label>
+          <div className="menu-wrap">
+            <button type="button" className="btn primary" onClick={toggleExportMenu} aria-expanded={exportMenuOpen}>
+              Export
+            </button>
+            {exportMenuOpen && (
+              <div className="menu-pop" onMouseLeave={closeHeaderMenus}>
+                <div className="menu-head">Export options</div>
+                <button type="button" className="menu-item" onClick={handleExportJson}>
+                  Export JSON
+                </button>
+                <button type="button" className="menu-item" onClick={handleExportSvg}>
+                  Export SVG
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -977,32 +1025,7 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-                <div className="sb-subhead">Import (Text / Doc Adapter)</div>
-                <div className="ai-prompt-wrap">
-                  <textarea
-                    className="ai-prompt"
-                    value={importTextDraft}
-                    onChange={(event) => setImportTextDraft(event.target.value)}
-                    placeholder="Paste process text or extracted document content (one step per line)"
-                  />
-                </div>
-                <div className="ct-grid">
-                  <button type="button" className="ct-btn" onClick={handleImportText} disabled={importBusy}>
-                    Import Text Candidate
-                  </button>
-                  <button
-                    type="button"
-                    className="ct-btn"
-                    onClick={handleImportDocumentFromDraft}
-                    disabled={importBusy}
-                  >
-                    Import as Document Candidate
-                  </button>
-                  <label className="ct-btn">
-                    Import Document File
-                    <input type="file" accept=".txt,.md,.csv,.json,.doc,.docx,.pdf" onChange={handleImportDocumentFile} />
-                  </label>
-                </div>
+                <div className="sb-subhead">Prompt</div>
                 <div className="ai-prompt-wrap">
                   <textarea
                     className={`ai-prompt ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}

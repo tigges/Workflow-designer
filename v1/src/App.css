@@ -207,6 +207,74 @@
   cursor: pointer;
 }
 
+.menu-wrap {
+  position: relative;
+}
+
+.menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.menu-caret {
+  font-size: 10px;
+  color: currentColor;
+}
+
+.menu-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 220px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: var(--shadow-md);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.menu-item,
+.menu-file {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.menu-item:hover:not(:disabled),
+.menu-file:hover {
+  background: var(--surface2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.menu-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.menu-file {
+  position: relative;
+  overflow: hidden;
+}
+
+.menu-file input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .btn.preview,
 .htab.preview,
 .ai-chip.preview,
