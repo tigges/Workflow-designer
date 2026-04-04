@@ -927,6 +927,37 @@
   z-index: 5;
 }
 
+.dock-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dock-btn {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  min-width: 24px;
+  height: 22px;
+  cursor: pointer;
+}
+
+.dock-btn.active {
+  border-color: #adc2fa;
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
+.dock-btn:hover {
+  border-color: var(--border-hi);
+}
+
 .tab-btn {
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -944,7 +975,7 @@
 }
 
 .flow-hint {
-  margin-left: 4px;
+  margin-left: 0;
   font-size: 11px;
   color: var(--text-dim);
   white-space: nowrap;
@@ -1442,6 +1473,11 @@
   overflow: hidden;
 }
 
+.canvas-wrap .react-flow__controls.dock-left {
+  left: 246px;
+  right: auto;
+}
+
 .canvas-wrap .react-flow__minimap {
   position: fixed;
   right: 272px;
@@ -1455,9 +1491,19 @@
   box-shadow: var(--shadow-md);
 }
 
+.canvas-wrap .react-flow__minimap.dock-left {
+  left: 246px;
+  right: auto;
+}
+
 @media (max-width: 1320px) {
   .workspace {
     grid-template-columns: 210px 1fr 230px;
+  }
+
+  .canvas-wrap .react-flow__controls.dock-left,
+  .canvas-wrap .react-flow__minimap.dock-left {
+    left: 222px;
   }
 }
 
@@ -1494,6 +1540,10 @@
     justify-content: flex-start;
   }
 
+  .dock-toggle {
+    margin-left: 0;
+  }
+
   .canvas-wrap .react-flow__controls {
     right: 10px;
     bottom: 42px;
@@ -1504,5 +1554,15 @@
     bottom: 122px;
     width: 140px;
     height: 92px;
+  }
+
+  .canvas-wrap .react-flow__controls.dock-left {
+    left: 10px;
+    right: auto;
+  }
+
+  .canvas-wrap .react-flow__minimap.dock-left {
+    left: 10px;
+    right: auto;
   }
 }

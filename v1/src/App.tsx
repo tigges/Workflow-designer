@@ -85,12 +85,14 @@ const FEATURE_AVAILABILITY = {
 type EdgeMode = 'auto' | 'manual'
 type StructureCluster = 'projects' | 'artifacts' | 'versions' | null
 type DraftSourceType = 'text' | 'document'
+type MinimapDock = 'left' | 'right'
 
 const UI_STORAGE_KEYS = {
   structureOpen: 'flowcraft.ui.structureOpen',
   previewOpen: 'flowcraft.ui.previewOpen',
   structureCluster: 'flowcraft.ui.structureCluster',
   edgeMode: 'flowcraft.ui.edgeMode',
+  minimapDock: 'flowcraft.ui.minimapDock',
 } as const
 
 function readStoredBool(key: string, fallback: boolean): boolean {
@@ -116,6 +118,12 @@ function readStoredEdgeMode(): EdgeMode {
   if (typeof window === 'undefined') return 'auto'
   const raw = window.localStorage.getItem(UI_STORAGE_KEYS.edgeMode)
   return raw === 'manual' ? 'manual' : 'auto'
+}
+
+function readStoredMinimapDock(): MinimapDock {
+  if (typeof window === 'undefined') return 'right'
+  const raw = window.localStorage.getItem(UI_STORAGE_KEYS.minimapDock)
+  return raw === 'left' ? 'left' : 'right'
 }
 
 function actorText(actor: Actor) {
@@ -277,6 +285,7 @@ export default function App() {
   const [importMenuOpen, setImportMenuOpen] = useState(false)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
+  const [minimapDock, setMinimapDock] = useState<MinimapDock>(() => readStoredMinimapDock())
   const [headerNotice, setHeaderNotice] = useState('')
   const [structureOpen, setStructureOpen] = useState(() =>
     readStoredBool(UI_STORAGE_KEYS.structureOpen, true),
@@ -362,6 +371,11 @@ export default function App() {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(UI_STORAGE_KEYS.edgeMode, edgeMode)
   }, [edgeMode])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(UI_STORAGE_KEYS.minimapDock, minimapDock)
+  }, [minimapDock])
 
   const canUndo = history.length > 1 && historyIndex > 0
 
@@ -1122,6 +1136,26 @@ export default function App() {
             >
               + Process Node
             </button>
+            <div className="dock-toggle" role="group" aria-label="Minimap dock side">
+              <button
+                type="button"
+                className={`dock-btn ${minimapDock === 'left' ? 'active' : ''}`}
+                onClick={() => setMinimapDock('left')}
+                aria-pressed={minimapDock === 'left'}
+                title="Dock minimap left"
+              >
+                L
+              </button>
+              <button
+                type="button"
+                className={`dock-btn ${minimapDock === 'right' ? 'active' : ''}`}
+                onClick={() => setMinimapDock('right')}
+                aria-pressed={minimapDock === 'right'}
+                title="Dock minimap right"
+              >
+                R
+              </button>
+            </div>
             <span className="flow-hint">Tip: click/drag node types to add, then drag from handles to connect</span>
           </div>
 
@@ -1162,8 +1196,8 @@ export default function App() {
                   fitView
                 >
                   <Background gap={24} color="#e6eaf1" />
-                  <MiniMap className="floating-minimap" position="bottom-right" />
-                  <Controls className="floating-controls" position="bottom-left" />
+                  <MiniMap className={`floating-minimap dock-${minimapDock}`} position="bottom-right" />
+                  <Controls className={`floating-controls dock-${minimapDock}`} position="bottom-left" />
                 </ReactFlow>
               ) : (
                 <div className="canvas-empty">
