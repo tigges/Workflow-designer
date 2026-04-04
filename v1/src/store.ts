@@ -11,6 +11,7 @@ import type {
   FlowEdge,
   FlowNode,
   FlowNodeType,
+  ImportDocumentMap,
   Origin,
   PMStore,
   ReviewState,
@@ -1235,6 +1236,25 @@ export const usePMStore = create<PMStore>((set, get) => ({
       return next
     })
     return { ok: true, message: 'Cleared current version to a blank import draft.' }
+  },
+
+  setImportDocumentMapForSelectedVersion: (documentMap) => {
+    set((state) => {
+      const next = clone(state)
+      const ref = getCurrentVersionRef(next)
+      if (!ref) return state
+      ref.version.importDocumentMap = documentMap ? clone(documentMap) : undefined
+      ref.artifact.updatedAt = now()
+      persist(next)
+      return next
+    })
+  },
+
+  getImportDocumentMapForSelectedVersion: () => {
+    const state = get()
+    const ref = getCurrentVersionRef(state)
+    if (!ref) return null
+    return ref.version.importDocumentMap ? (clone(ref.version.importDocumentMap) as ImportDocumentMap) : null
   },
 
   importFromJson: (rawJson) => {

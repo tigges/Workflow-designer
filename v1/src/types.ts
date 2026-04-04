@@ -8,8 +8,28 @@ export type Actor = '' | 'customer' | 'agent' | 'system' | 'manager' | 'external
 export type Origin = 'manual' | 'text_import' | 'doc_import' | 'ai_assist'
 export type FlowNodeType = 'terminal' | 'process' | 'decision' | 'data' | 'annotation'
 export type EdgeType = 'sequential' | 'conditional' | 'parallel' | 'fallback'
+export type ImportDocumentBlockType = 'context' | 'process' | 'subprocess' | 'fact' | 'unclassified'
 
 export type XY = { x: number; y: number }
+
+export type ImportDocumentBlock = {
+  id: string
+  page: number
+  type: ImportDocumentBlockType
+  interpreted: string
+  excerpt: string
+  confidence: number | null
+  signals: string[]
+}
+
+export type ImportDocumentMap = {
+  id: string
+  title: string
+  sourceLabel: string
+  pageCount: number
+  blocks: ImportDocumentBlock[]
+  createdAt: string
+}
 
 export type Workspace = {
   id: string
@@ -140,6 +160,7 @@ export type MapVersion = {
   name: string
   schemaVersion: SchemaVersion
   data: CanonicalModel
+  importDocumentMap?: ImportDocumentMap
   reviewState: ReviewState
   reviewAudit: ReviewAuditEntry[]
   exportArtifacts: ExportArtifact[]
@@ -212,6 +233,8 @@ export type PMStore = AppState & {
   importFromDocument: (input: string) => { ok: boolean; message: string }
   importFromAiAssist: (prompt: string) => { ok: boolean; message: string }
   clearCurrentVersion: () => { ok: boolean; message: string }
+  setImportDocumentMapForSelectedVersion: (documentMap: ImportDocumentMap | null) => void
+  getImportDocumentMapForSelectedVersion: () => ImportDocumentMap | null
   importFromJson: (rawJson: string) => { ok: boolean; message: string }
   recordExportForSelectedVersion: (payload: {
     format: ExportFormat
