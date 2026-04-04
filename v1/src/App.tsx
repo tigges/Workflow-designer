@@ -94,6 +94,7 @@ const FEATURE_AVAILABILITY = {
 } as const
 
 type EdgeMode = 'auto' | 'manual'
+type CanvasTool = 'select' | 'connect'
 type StructureCluster = 'projects' | 'artifacts' | 'versions' | null
 type DraftSourceType = 'text' | 'document'
 
@@ -324,6 +325,7 @@ export default function App() {
   const [activeTemplate, setActiveTemplate] = useState<(typeof TEMPLATE_TABS)[number]>('Support')
   const [activeEdgeType, setActiveEdgeType] = useState<EdgeType>('sequential')
   const [edgeMode, setEdgeMode] = useState<EdgeMode>(() => readStoredEdgeMode())
+  const [canvasTool, setCanvasTool] = useState<CanvasTool>('select')
   const [draftSourceType, setDraftSourceType] = useState<DraftSourceType>('text')
   const [importBusy, setImportBusy] = useState(false)
   const [exportBusy, setExportBusy] = useState(false)
@@ -568,6 +570,10 @@ export default function App() {
   }
 
   function handleConnect(conn: Connection) {
+    if (canvasTool !== 'connect') {
+      setHeaderNotice('Switch to Connect mode in the bottom toolbar to create links.')
+      return
+    }
     if (!conn.source || !conn.target) return
     const edge = buildDefaultEdge(conn.source, conn.target)
     const sourceNode = currentModel?.nodes.find((node) => node.id === conn.source)
@@ -597,6 +603,33 @@ export default function App() {
       return
     }
     if (selectedEdgeId) removeEdgeFromCurrentVersion(selectedEdgeId)
+  }
+
+  function handleSetCanvasTool(nextTool: CanvasTool) {
+    setCanvasTool(nextTool)
+    setHeaderNotice(
+      nextTool === 'connect'
+        ? 'Connect mode active. Drag from one node handle to another to create links.'
+        : 'Select mode active. Click nodes or edges to edit, then use inspector or delete.',
+    )
+  }
+
+  function handleCanvasToolbarUndo() {
+    if (!canUndo) {
+      setHeaderNotice('Nothing to undo yet.')
+      return
+    }
+    undoCurrentVersion()
+    setHeaderNotice('Undid last change.')
+  }
+
+  function handleCanvasToolbarDelete() {
+    if (!selectedNodeId && !selectedEdgeId) {
+      setHeaderNotice('Select a node or edge first.')
+      return
+    }
+    handleDeleteSelection()
+    setHeaderNotice('Deleted selected element.')
   }
 
   function handleValidateClick() {
@@ -1204,7 +1237,7 @@ export default function App() {
           </div>
 
           <div
-            className="canvas-wrap"
+            className={`canvas-wrap canvas-tool-${canvasTool}`}
             ref={canvasWrapRef}
             onDragOver={handleCanvasDragOver}
             onDrop={handleCanvasDrop}
@@ -1235,7 +1268,7 @@ export default function App() {
                   onInit={setRfInstance}
                   nodeTypes={nodeTypes}
                   nodesDraggable
-                  nodesConnectable
+                  nodesConnectable={canvasTool === 'connect'}
                   elementsSelectable
                   fitView
                 >
@@ -1303,6 +1336,47 @@ export default function App() {
               <div className="canvas-empty">
                 <h3>No version selected</h3>
                 <p>Select or create an artifact/version to view the Journey Map.</p>
+              </div>
+            )}
+            {selectedTab === 'flow' && selectedVersion && (
+              <div className="canvas-context-toolbar" role="toolbar" aria-label="Canvas context actions">
+                <button
+                  type="button"
+                  className={`ctx-btn ${canvasTool === 'select' ? 'active' : ''}`}
+                  onClick={() => handleSetCanvasTool('select')}
+                  title="Select mode (V)"
+                  aria-pressed={canvasTool === 'select'}
+                >
+                  Select
+                </button>
+                <button
+                  type="button"
+                  className={`ctx-btn ${canvasTool === 'connect' ? 'active' : ''}`}
+                  onClick={() => handleSetCanvasTool('connect')}
+                  title="Connect mode (C)"
+                  aria-pressed={canvasTool === 'connect'}
+                >
+                  Connect
+                </button>
+                <span className="ctx-sep" aria-hidden />
+                <button
+                  type="button"
+                  className="ctx-btn"
+                  onClick={handleCanvasToolbarUndo}
+                  disabled={!canUndo}
+                  title="Undo (Ctrl/Cmd+Z)"
+                >
+                  Undo
+                </button>
+                <button
+                  type="button"
+                  className="ctx-btn danger"
+                  onClick={handleCanvasToolbarDelete}
+                  disabled={!selectedNodeId && !selectedEdgeId}
+                  title="Delete selected"
+                >
+                  Delete
+                </button>
               </div>
             )}
           </div>
