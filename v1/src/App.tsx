@@ -30,8 +30,6 @@ import type {
   EdgeType,
   FlowEdge,
   FlowNode,
-  MapArtifact,
-  MapVersion,
   ReviewState,
 } from './types'
 
@@ -66,8 +64,6 @@ const EDGE_OPTIONS: Array<{ value: EdgeType; label: string }> = [
   { value: 'fallback', label: 'Fallback' },
 ]
 
-const EDGE_AUTO_MODE = true
-
 const ACTOR_OPTIONS: Array<{ value: Actor; label: string }> = [
   { value: '', label: 'Unassigned' },
   { value: 'customer', label: 'Customer' },
@@ -85,6 +81,41 @@ const FEATURE_AVAILABILITY = {
   aiAssist: false,
   importJson: false,
 } as const
+
+type EdgeMode = 'auto' | 'manual'
+type StructureCluster = 'projects' | 'artifacts' | 'versions' | null
+
+const UI_STORAGE_KEYS = {
+  structureOpen: 'flowcraft.ui.structureOpen',
+  previewOpen: 'flowcraft.ui.previewOpen',
+  structureCluster: 'flowcraft.ui.structureCluster',
+  edgeMode: 'flowcraft.ui.edgeMode',
+} as const
+
+function readStoredBool(key: string, fallback: boolean): boolean {
+  if (typeof window === 'undefined') return fallback
+  const raw = window.localStorage.getItem(key)
+  if (raw === null) return fallback
+  return raw === '1'
+}
+
+function writeStoredBool(key: string, value: boolean) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(key, value ? '1' : '0')
+}
+
+function readStoredStructureCluster(): StructureCluster {
+  if (typeof window === 'undefined') return 'projects'
+  const raw = window.localStorage.getItem(UI_STORAGE_KEYS.structureCluster)
+  if (raw === 'projects' || raw === 'artifacts' || raw === 'versions') return raw
+  return 'projects'
+}
+
+function readStoredEdgeMode(): EdgeMode {
+  if (typeof window === 'undefined') return 'auto'
+  const raw = window.localStorage.getItem(UI_STORAGE_KEYS.edgeMode)
+  return raw === 'manual' ? 'manual' : 'auto'
+}
 
 function actorText(actor: Actor) {
   if (!actor) return 'unassigned'
@@ -231,10 +262,18 @@ export default function App() {
 
   const [activeTemplate, setActiveTemplate] = useState<(typeof TEMPLATE_TABS)[number]>('Support')
   const [activeEdgeType, setActiveEdgeType] = useState<EdgeType>('sequential')
+  const [edgeMode, setEdgeMode] = useState<EdgeMode>(() => readStoredEdgeMode())
   const [aiPrompt, setAiPrompt] = useState('')
   const [headerNotice, setHeaderNotice] = useState('')
-  const [structureOpen, setStructureOpen] = useState(true)
-  const [previewOpen, setPreviewOpen] = useState(false)
+  const [structureOpen, setStructureOpen] = useState(() =>
+    readStoredBool(UI_STORAGE_KEYS.structureOpen, true),
+  )
+  const [previewOpen, setPreviewOpen] = useState(() =>
+    readStoredBool(UI_STORAGE_KEYS.previewOpen, false),
+  )
+  const [activeStructureCluster, setActiveStructureCluster] = useState<StructureCluster>(() =>
+    readStoredStructureCluster(),
+  )
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance<Node<RFNodeData>, Edge> | null>(
     null,
   )
@@ -284,6 +323,28 @@ export default function App() {
     setRfNodes(rfNodeSeed)
     setRfEdges(rfEdgeSeed)
   }, [rfNodeSeed, rfEdgeSeed, setRfNodes, setRfEdges])
+
+  useEffect(() => {
+    writeStoredBool(UI_STORAGE_KEYS.structureOpen, structureOpen)
+  }, [structureOpen])
+
+  useEffect(() => {
+    writeStoredBool(UI_STORAGE_KEYS.previewOpen, previewOpen)
+  }, [previewOpen])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (activeStructureCluster) {
+      window.localStorage.setItem(UI_STORAGE_KEYS.structureCluster, activeStructureCluster)
+      return
+    }
+    window.localStorage.removeItem(UI_STORAGE_KEYS.structureCluster)
+  }, [activeStructureCluster])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(UI_STORAGE_KEYS.edgeMode, edgeMode)
+  }, [edgeMode])
 
   const canUndo = history.length > 1 && historyIndex > 0
 
@@ -429,15 +490,23 @@ export default function App() {
     const edge = buildDefaultEdge(conn.source, conn.target)
     const sourceNode = currentModel?.nodes.find((node) => node.id === conn.source)
     const targetNode = currentModel?.nodes.find((node) => node.id === conn.target)
-    edge.type = EDGE_AUTO_MODE
+    edge.type = edgeMode === 'auto'
       ? inferEdgeType(sourceNode, targetNode, activeEdgeType)
       : activeEdgeType
     addEdgeToCurrentVersion(edge)
     setHeaderNotice(
-      EDGE_AUTO_MODE
+      edgeMode === 'auto'
         ? `Connected with ${edge.type} (auto).`
         : `Connected with ${edge.type} (manual).`,
     )
+  }
+
+  function openStructureCluster(cluster: Exclude<StructureCluster, null>) {
+    setActiveStructureCluster((current) => (current === cluster ? null : cluster))
+  }
+
+  function isStructureClusterOpen(cluster: Exclude<StructureCluster, null>) {
+    return activeStructureCluster === cluster
   }
 
   function handleDeleteSelection() {
@@ -624,11 +693,24 @@ export default function App() {
               </button>
             ))}
 
-            <div className="sb-subhead">
-              Connection Type
-              <span className={`mode-tag ${EDGE_AUTO_MODE ? 'auto' : 'manual'}`}>
-                {EDGE_AUTO_MODE ? 'Auto' : 'Manual'}
-              </span>
+            <div className="sb-row">
+              <div className="sb-subhead">Connection Type</div>
+              <div className="mode-switch" role="tablist" aria-label="Connection mode">
+                <button
+                  type="button"
+                  className={`mode-tag ${edgeMode === 'auto' ? 'active auto' : ''}`}
+                  onClick={() => setEdgeMode('auto')}
+                >
+                  Auto
+                </button>
+                <button
+                  type="button"
+                  className={`mode-tag ${edgeMode === 'manual' ? 'active manual' : ''}`}
+                  onClick={() => setEdgeMode('manual')}
+                >
+                  Manual
+                </button>
+              </div>
             </div>
             <div className="ct-grid">
               {EDGE_OPTIONS.map((opt) => (
@@ -643,6 +725,11 @@ export default function App() {
                 </button>
               ))}
             </div>
+            <div className="mode-note">
+              {edgeMode === 'auto'
+                ? 'Auto picks connection type from node context.'
+                : 'Manual uses the selected connection type exactly.'}
+            </div>
           </section>
 
           <section className="sb-sec collapsible">
@@ -655,73 +742,121 @@ export default function App() {
               <span className="sb-label">Structure</span>
               <span className="collapse-indicator">{structureOpen ? '−' : '+'}</span>
             </button>
+            {!structureOpen && (
+              <div className="collapsed-note">Collapsed. Expand to access projects, artifacts, and versions.</div>
+            )}
             {structureOpen && (
-              <>
-                <div className="sb-row">
-                  <div className="sb-subhead">Projects</div>
-                  <button type="button" className="tiny-btn" onClick={handleCreateProject}>
-                    + add
-                  </button>
-                </div>
-                <div className="stack-list">
-                  {projects.map((project) => (
-                    <button
-                      key={project.id}
-                      type="button"
-                      className={`stack-btn ${project.id === selectedProjectId ? 'active' : ''}`}
-                      onClick={() => selectProject(project.id)}
-                    >
-                      {project.name}
-                    </button>
-                  ))}
-                </div>
+              <div className="section-subcollapse">
                 <button
                   type="button"
-                  className="tiny-btn danger"
-                  onClick={() => selectedProjectId && deleteProject(selectedProjectId)}
-                  disabled={!selectedProjectId || projects.length <= 1}
+                  className="cluster-head"
+                  onClick={() => openStructureCluster('projects')}
+                  aria-expanded={isStructureClusterOpen('projects')}
                 >
-                  Delete current
+                  <span className="sb-subhead">Projects</span>
+                  <span className="collapse-indicator">
+                    {isStructureClusterOpen('projects') ? '−' : '+'}
+                  </span>
                 </button>
-
-                <div className="sb-row">
-                  <div className="sb-subhead">Artifacts</div>
-                  <button type="button" className="tiny-btn" onClick={handleCreateArtifact} disabled={!selectedProject}>
-                    + add
-                  </button>
-                </div>
-                <div className="stack-list">
-                  {projectArtifacts.map((artifact: MapArtifact) => (
+                {isStructureClusterOpen('projects') && (
+                  <div className="cluster-content">
+                    <div className="sb-row">
+                      <div className="sb-subhead">Projects</div>
+                      <button type="button" className="tiny-btn" onClick={handleCreateProject}>
+                        + add
+                      </button>
+                    </div>
+                    <div className="stack-list">
+                      {projects.map((project) => (
+                        <button
+                          key={project.id}
+                          type="button"
+                          className={`stack-btn ${project.id === selectedProjectId ? 'active' : ''}`}
+                          onClick={() => selectProject(project.id)}
+                        >
+                          {project.name}
+                        </button>
+                      ))}
+                    </div>
                     <button
-                      key={artifact.id}
                       type="button"
-                      className={`stack-btn ${artifact.id === selectedArtifactId ? 'active' : ''}`}
-                      onClick={() => selectArtifact(artifact.id)}
+                      className="tiny-btn danger"
+                      onClick={() => selectedProjectId && deleteProject(selectedProjectId)}
+                      disabled={!selectedProjectId || projects.length <= 1}
                     >
-                      {artifact.name}
+                      Delete current
                     </button>
-                  ))}
-                </div>
+                  </div>
+                )}
 
-                <div className="sb-row">
-                  <div className="sb-subhead">Versions</div>
-                  <button type="button" className="tiny-btn" onClick={handleCreateVersion} disabled={!selectedArtifact}>
-                    + add
-                  </button>
-                </div>
-                <div className="stack-list">
-                  {versions.map((version: MapVersion) => (
-                    <button
-                      key={version.id}
-                      type="button"
-                      className={`stack-btn ${version.id === selectedVersionId ? 'active' : ''}`}
-                      onClick={() => selectVersion(version.id)}
-                    >
-                      {version.name}
-                    </button>
-                  ))}
-                </div>
-              </>
+                <button
+                  type="button"
+                  className="cluster-head"
+                  onClick={() => openStructureCluster('artifacts')}
+                  aria-expanded={isStructureClusterOpen('artifacts')}
+                >
+                  <span className="sb-subhead">Artifacts</span>
+                  <span className="collapse-indicator">
+                    {isStructureClusterOpen('artifacts') ? '−' : '+'}
+                  </span>
+                </button>
+                {isStructureClusterOpen('artifacts') && (
+                  <div className="cluster-content">
+                    <div className="sb-row">
+                      <div className="sb-subhead">Artifacts</div>
+                      <button type="button" className="tiny-btn" onClick={handleCreateArtifact} disabled={!selectedProject}>
+                        + add
+                      </button>
+                    </div>
+                    <div className="stack-list">
+                      {projectArtifacts.map((artifact) => (
+                        <button
+                          key={artifact.id}
+                          type="button"
+                          className={`stack-btn ${artifact.id === selectedArtifactId ? 'active' : ''}`}
+                          onClick={() => selectArtifact(artifact.id)}
+                        >
+                          {artifact.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="cluster-head"
+                  onClick={() => openStructureCluster('versions')}
+                  aria-expanded={isStructureClusterOpen('versions')}
+                >
+                  <span className="sb-subhead">Versions</span>
+                  <span className="collapse-indicator">
+                    {isStructureClusterOpen('versions') ? '−' : '+'}
+                  </span>
+                </button>
+                {isStructureClusterOpen('versions') && (
+                  <div className="cluster-content">
+                    <div className="sb-row">
+                      <div className="sb-subhead">Versions</div>
+                      <button type="button" className="tiny-btn" onClick={handleCreateVersion} disabled={!selectedArtifact}>
+                        + add
+                      </button>
+                    </div>
+                    <div className="stack-list">
+                      {versions.map((version) => (
+                        <button
+                          key={version.id}
+                          type="button"
+                          className={`stack-btn ${version.id === selectedVersionId ? 'active' : ''}`}
+                          onClick={() => selectVersion(version.id)}
+                        >
+                          {version.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </section>
 
