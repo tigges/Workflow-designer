@@ -2161,6 +2161,48 @@
   gap: 10px;
 }
 
+.docmap-stack-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #d8deea;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #f9fbff;
+}
+
+.docmap-stack-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.docmap-stack-title-wrap strong {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #56627b;
+}
+
+.docmap-stack-subtitle {
+  font-size: 11px;
+  color: #74819a;
+}
+
+.docmap-panel-toggle {
+  white-space: nowrap;
+}
+
+.docmap-visible-note {
+  font-size: 11px;
+  color: #74819a;
+  border: 1px dashed #d0d9e8;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f8fafd;
+}
+
 .lane-list {
   display: flex;
   flex-direction: column;

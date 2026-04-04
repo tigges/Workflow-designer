@@ -105,6 +105,10 @@ async function run() {
       avgDecisionF1: avg(runs.map((run) => run.metrics.decisionF1)),
       avgUnassignedRate: avg(runs.map((run) => run.metrics.unassignedRate)),
       avgNodeExplosionRate: avg(runs.map((run) => run.metrics.nodeExplosionRate)),
+      avgLongTitleRate: avg(runs.map((run) => run.metrics.longTitleRate)),
+      avgHierarchyCoverage: avg(runs.map((run) => run.metrics.hierarchyCoverage)),
+      avgFactPolicyRecall: avg(runs.map((run) => run.metrics.factPolicyRecall)),
+      avgNodeBudgetViolationRate: avg(runs.map((run) => run.metrics.nodeBudgetViolationRate)),
       avgManualEditsNeededToApprove: avg(runs.map((run) => run.metrics.manualEditsNeededToApprove)),
     },
   }
@@ -121,9 +125,9 @@ async function run() {
     `Fixtures: ${summary.fixtureCount}`,
     ...summary.runs.map(
       (run) =>
-        `${run.fixtureId}: clusterR=${run.metrics.clusterRecall} stepR=${run.metrics.stepExtractionRecall} assignAcc=${run.metrics.assignmentAccuracy} decisionF1=${run.metrics.decisionF1} unassigned=${run.metrics.unassignedRate} explosion=${run.metrics.nodeExplosionRate} edits=${run.metrics.manualEditsNeededToApprove}`,
+        `${run.fixtureId}: clusterR=${run.metrics.clusterRecall} stepR=${run.metrics.stepExtractionRecall} assignAcc=${run.metrics.assignmentAccuracy} decisionF1=${run.metrics.decisionF1} unassigned=${run.metrics.unassignedRate} explosion=${run.metrics.nodeExplosionRate} longTitle=${run.metrics.longTitleRate} hierarchy=${run.metrics.hierarchyCoverage} factPolicy=${run.metrics.factPolicyRecall} budgetViol=${run.metrics.nodeBudgetViolationRate} edits=${run.metrics.manualEditsNeededToApprove}`,
     ),
-    `Aggregate: clusterR=${summary.aggregate.avgClusterRecall} stepR=${summary.aggregate.avgStepExtractionRecall} assignAcc=${summary.aggregate.avgAssignmentAccuracy} decisionF1=${summary.aggregate.avgDecisionF1} unassigned=${summary.aggregate.avgUnassignedRate} explosion=${summary.aggregate.avgNodeExplosionRate} edits=${summary.aggregate.avgManualEditsNeededToApprove}`,
+    `Aggregate: clusterR=${summary.aggregate.avgClusterRecall} stepR=${summary.aggregate.avgStepExtractionRecall} assignAcc=${summary.aggregate.avgAssignmentAccuracy} decisionF1=${summary.aggregate.avgDecisionF1} unassigned=${summary.aggregate.avgUnassignedRate} explosion=${summary.aggregate.avgNodeExplosionRate} longTitle=${summary.aggregate.avgLongTitleRate} hierarchy=${summary.aggregate.avgHierarchyCoverage} factPolicy=${summary.aggregate.avgFactPolicyRecall} budgetViol=${summary.aggregate.avgNodeBudgetViolationRate} edits=${summary.aggregate.avgManualEditsNeededToApprove}`,
     `Wrote: ${path.join(outputDir, 'latest-summary.json')}`,
   ]
   process.stdout.write(`${lines.join('\n')}\n`)

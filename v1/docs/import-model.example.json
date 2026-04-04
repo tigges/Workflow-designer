@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "import-model-v2",
+  "source": {
+    "kind": "ai_assist",
+    "name": "withdrawal-chapter-4.2"
+  },
+  "clusters": [
+    "Core Concepts & Account Management",
+    "User Data & Support Issues",
+    "Payments & Deposits",
+    "Withdrawals & Cashier",
+    "Verification & Risk",
+    "Bonuses & Gamification",
+    "Sports Betting",
+    "Account Status & Safety"
+  ],
+  "sections": [
+    {
+      "title": "Withdrawal Status Handling",
+      "clusterHint": "Withdrawals & Cashier",
+      "steps": [
+        {
+          "kind": "process",
+          "title": "Check withdrawal status in finance tab",
+          "notes": "Open withdrawal request details and evaluate current state.",
+          "confidence": 0.91
+        },
+        {
+          "kind": "decision",
+          "title": "Is withdrawal pending longer than 3 business days?",
+          "notes": "If yes, acknowledge delay and provide escalation guidance.",
+          "confidence": 0.87
+        },
+        {
+          "kind": "policy",
+          "title": "Bank settlement may take 3-5 business days",
+          "notes": "Inform user that completion in cashier does not guarantee immediate bank posting.",
+          "confidence": 0.82
+        },
+        {
+          "kind": "fact",
+          "title": "ARN required after long complete-state delay",
+          "notes": "Escalate to finance for ARN when completion exceeds expected timeframe.",
+          "confidence": 0.8
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "warnings": [
+      "Input exceeded recommended line density; low-signal lines were collapsed."
+    ],
+    "budgets": {
+      "maxInputLines": 600,
+      "maxProcessNodes": 72,
+      "maxAnnotationNodes": 24,
+      "maxEdges": 120
+    }
+  }
+}

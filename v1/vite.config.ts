@@ -10,7 +10,31 @@ type GeminiAssistRequest = {
   model?: string
 }
 
+type GeminiStructuredStepKind = 'process' | 'decision' | 'fact' | 'policy' | 'unclassified'
+
+type GeminiStructuredStep = {
+  kind: GeminiStructuredStepKind
+  title: string
+  notes: string
+  confidence: number | null
+}
+
+type GeminiStructuredSection = {
+  title: string
+  clusterHint?: string
+  steps: GeminiStructuredStep[]
+}
+
+type GeminiStructuredPayload = {
+  schemaVersion: 'import-model-v2'
+  clusters: string[]
+  sections: GeminiStructuredSection[]
+  cleanedText: string
+  warnings: string[]
+}
+
 const GEMINI_DEFAULT_MODEL = 'gemini-2.5-flash'
+const STRUCTURED_SCHEMA_VERSION = 'import-model-v2'
 
 function readRequestBody(request: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -31,22 +55,32 @@ function geminiInstruction(mode: GeminiAssistMode): string {
   if (mode === 'toc_seed') {
     return [
       'Extract top-level clusters from this input.',
-      'Return ONLY lines in this exact format:',
-      'Cluster: <cluster name>',
-      'No bullets, numbering, markdown, or commentary.',
+      'Return STRICT JSON only.',
+      'Schema:',
+      '{"schemaVersion":"import-model-v2","clusters":["Cluster A"],"warnings":[]}',
+      'Rules:',
+      '- clusters must be unique',
+      '- no markdown, no commentary',
     ].join('\n')
   }
   if (mode === 'ocr_cleanup') {
     return [
       'Clean OCR noise while preserving original meaning.',
-      'Return plain text only.',
+      'Return STRICT JSON only.',
+      'Schema:',
+      '{"schemaVersion":"import-model-v2","cleanedText":"...","warnings":[]}',
       'Fix line wraps and hyphenation artifacts.',
     ].join('\n')
   }
   return [
-    'Convert the input into concise process-step lines for map import.',
-    'Return plain text lines only.',
-    'Prefer: Start:, Decision:, and End: when appropriate.',
+    'Convert the input into hierarchical import data.',
+    'Return STRICT JSON only.',
+    'Schema:',
+    '{"schemaVersion":"import-model-v2","sections":[{"title":"Section","clusterHint":"Optional","steps":[{"kind":"process|decision|fact|policy|unclassified","title":"Short title","notes":"Optional notes","confidence":0.0}]}],"warnings":[]}',
+    'Rules:',
+    '- keep titles concise',
+    '- classify non-procedural statements as fact or policy',
+    '- do not output markdown',
   ].join('\n')
 }
 
@@ -54,6 +88,177 @@ function sendJson(response: ServerResponse, status: number, payload: unknown) {
   response.statusCode = status
   response.setHeader('Content-Type', 'application/json')
   response.end(JSON.stringify(payload))
+}
+
+function uniqueStrings(input: unknown): string[] {
+  if (!Array.isArray(input)) return []
+  const seen = new Set<string>()
+  const output: string[] = []
+  for (const value of input) {
+    if (typeof value !== 'string') continue
+    const normalized = value.trim()
+    if (!normalized) continue
+    const key = normalized.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    output.push(normalized)
+  }
+  return output
+}
+
+function extractJsonCandidate(text: string): string {
+  const fenced = text.match(/```json\s*([\s\S]+?)```/i) ?? text.match(/```\s*([\s\S]+?)```/i)
+  if (fenced?.[1]) return fenced[1].trim()
+  return text.trim()
+}
+
+function toStepKind(value: unknown): GeminiStructuredStepKind {
+  const kind = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  if (
+    kind === 'process' ||
+    kind === 'decision' ||
+    kind === 'fact' ||
+    kind === 'policy' ||
+    kind === 'unclassified'
+  ) {
+    return kind
+  }
+  return 'process'
+}
+
+function normalizeTextLine(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+function normalizeStructuredPayload(
+  mode: GeminiAssistMode,
+  rawText: string,
+): { text: string; structured: GeminiStructuredPayload; warnings: string[] } {
+  const warnings: string[] = []
+  const candidate = extractJsonCandidate(rawText)
+  let parsed: Record<string, unknown> = {}
+  try {
+    parsed = JSON.parse(candidate) as Record<string, unknown>
+  } catch {
+    warnings.push('Gemini returned non-JSON output; applied fallback normalization.')
+  }
+
+  if (mode === 'toc_seed') {
+    const clustersFromJson = uniqueStrings(parsed.clusters)
+    const clustersFromText = rawText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.replace(/^[-*]\s*/, ''))
+      .map((line) => {
+        const match = line.match(/^cluster\s*:\s*(.+)$/i)
+        return match ? match[1].trim() : ''
+      })
+      .filter(Boolean)
+    const clusters = uniqueStrings(clustersFromJson.length > 0 ? clustersFromJson : clustersFromText)
+    const text = clusters.map((cluster) => `Cluster: ${cluster}`).join('\n')
+    return {
+      text,
+      warnings,
+      structured: {
+        schemaVersion: STRUCTURED_SCHEMA_VERSION,
+        clusters,
+        sections: [],
+        cleanedText: '',
+        warnings: [...warnings, ...uniqueStrings(parsed.warnings)],
+      },
+    }
+  }
+
+  if (mode === 'ocr_cleanup') {
+    const cleanedText = normalizeTextLine(parsed.cleanedText) || rawText.trim()
+    return {
+      text: cleanedText,
+      warnings,
+      structured: {
+        schemaVersion: STRUCTURED_SCHEMA_VERSION,
+        clusters: [],
+        sections: [],
+        cleanedText,
+        warnings: [...warnings, ...uniqueStrings(parsed.warnings)],
+      },
+    }
+  }
+
+  const rawSections = Array.isArray(parsed.sections) ? parsed.sections : []
+  const normalizedSections: GeminiStructuredSection[] = rawSections
+    .map((section) => {
+      if (!section || typeof section !== 'object') return null
+      const item = section as Record<string, unknown>
+      const title = normalizeTextLine(item.title) || 'Imported Section'
+      const clusterHint = normalizeTextLine(item.clusterHint) || undefined
+      const steps = (Array.isArray(item.steps) ? item.steps : [])
+        .map((step) => {
+          if (!step || typeof step !== 'object') return null
+          const rawStep = step as Record<string, unknown>
+          const stepTitle = normalizeTextLine(rawStep.title)
+          if (!stepTitle) return null
+          const notes = normalizeTextLine(rawStep.notes)
+          const confidenceRaw =
+            typeof rawStep.confidence === 'number' && !Number.isNaN(rawStep.confidence)
+              ? Math.max(0, Math.min(1, rawStep.confidence))
+              : null
+          return {
+            kind: toStepKind(rawStep.kind),
+            title: stepTitle,
+            notes,
+            confidence: confidenceRaw,
+          } satisfies GeminiStructuredStep
+        })
+        .filter((step): step is GeminiStructuredStep => step !== null)
+      if (steps.length === 0) return null
+      return { title, clusterHint, steps }
+    })
+    .filter((section): section is GeminiStructuredSection => section !== null)
+
+  if (normalizedSections.length === 0) {
+    const fallbackLines = rawText
+      .split(/\r?\n/)
+      .map((line) => normalizeTextLine(line))
+      .filter(Boolean)
+      .slice(0, 80)
+    if (fallbackLines.length > 0) {
+      warnings.push('Structured sections missing; mapped plain text into fallback section.')
+      normalizedSections.push({
+        title: 'Imported Detail',
+        steps: fallbackLines.map((line) => ({
+          kind: /^(decision:|if |when )/i.test(line) || line.includes('?') ? 'decision' : 'process',
+          title: line,
+          notes: '',
+          confidence: null,
+        })),
+      })
+    }
+  }
+
+  const text = normalizedSections
+    .flatMap((section) => [
+      `# ${section.title}`,
+      ...section.steps.map((step) => {
+        const prefix = `[${step.kind}]`
+        return step.notes ? `${prefix} ${step.title}; ${step.notes}` : `${prefix} ${step.title}`
+      }),
+    ])
+    .join('\n')
+    .trim()
+
+  return {
+    text,
+    warnings,
+    structured: {
+      schemaVersion: STRUCTURED_SCHEMA_VERSION,
+      clusters: uniqueStrings(parsed.clusters),
+      sections: normalizedSections,
+      cleanedText: '',
+      warnings: [...warnings, ...uniqueStrings(parsed.warnings)],
+    },
+  }
 }
 
 async function handleGeminiAssist(request: IncomingMessage, response: ServerResponse) {
@@ -105,6 +310,7 @@ async function handleGeminiAssist(request: IncomingMessage, response: ServerResp
             temperature: 0.2,
             topP: 0.9,
             maxOutputTokens: 2048,
+            responseMimeType: mode === 'ocr_cleanup' ? 'text/plain' : 'application/json',
           },
         }),
       },
@@ -132,7 +338,13 @@ async function handleGeminiAssist(request: IncomingMessage, response: ServerResp
       return
     }
 
-    sendJson(response, 200, { text })
+    const normalized = normalizeStructuredPayload(mode, text)
+    sendJson(response, 200, {
+      mode,
+      text: normalized.text,
+      warnings: normalized.warnings,
+      structured: normalized.structured,
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Gemini proxy request failed.'
     sendJson(response, 500, { error: message })

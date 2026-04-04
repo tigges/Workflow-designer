@@ -25,6 +25,10 @@ export type ImportEvalMetrics = {
   decisionF1: number
   unassignedRate: number
   nodeExplosionRate: number
+  longTitleRate: number
+  hierarchyCoverage: number
+  factPolicyRecall: number
+  nodeBudgetViolationRate: number
   manualEditsNeededToApprove: number
   predictedNodeCount: number
   predictedEdgeCount: number
@@ -212,6 +216,24 @@ export function evaluateImportQuality(
 
   const nodeExplosionRate =
     fixture.goldSteps.length === 0 ? 0 : predictedStepNodes.length / fixture.goldSteps.length
+  const longTitleCount = predictedStepNodes.filter((node) => (node.label ?? '').trim().length > 72).length
+  const longTitleRate = predictedStepNodes.length === 0 ? 0 : longTitleCount / predictedStepNodes.length
+  const hierarchyNodes = predictedStepNodes.filter((node) => (node.metadata.notes ?? '').trim().length > 0).length
+  const hierarchyCoverage = predictedStepNodes.length === 0 ? 0 : hierarchyNodes / predictedStepNodes.length
+  const goldFactPolicyCandidates = fixture.goldSteps.filter((step) =>
+    /\b(policy|must|should|required|rule|within|business day|sla|fact|context|definition)\b/i.test(step),
+  )
+  const matchedFactPolicy = goldFactPolicyCandidates.filter((candidate) =>
+    predictedStepNodes.some((node) =>
+      normalize(nodeText(node)).includes(normalize(candidate)) ||
+      normalize(`${node.metadata.notes ?? ''}`).includes(normalize(candidate)),
+    ),
+  ).length
+  const factPolicyRecall =
+    goldFactPolicyCandidates.length === 0 ? 1 : matchedFactPolicy / goldFactPolicyCandidates.length
+  const budgetViolations =
+    (predictedStepNodes.length > 96 ? 1 : 0) + (model.edges.length > 120 ? 1 : 0) + (longTitleRate > 0.08 ? 1 : 0)
+  const nodeBudgetViolationRate = budgetViolations / 3
   const manualEditsNeededToApprove = Math.max(
     0,
     Math.round((1 - assignmentAccuracy) * fixture.goldSteps.length + unassigned),
@@ -227,6 +249,10 @@ export function evaluateImportQuality(
     decisionF1: toFixed(decisionF1),
     unassignedRate: toFixed(unassignedRate),
     nodeExplosionRate: toFixed(nodeExplosionRate),
+    longTitleRate: toFixed(longTitleRate),
+    hierarchyCoverage: toFixed(hierarchyCoverage),
+    factPolicyRecall: toFixed(factPolicyRecall),
+    nodeBudgetViolationRate: toFixed(nodeBudgetViolationRate),
     manualEditsNeededToApprove,
     predictedNodeCount: predictedStepNodes.length,
     predictedEdgeCount: model.edges.length,

@@ -308,6 +308,43 @@ type DocMapFilter = 'all' | ImportDocumentBlockType
 type ExternalAssistProvider = 'none' | 'gemini' | 'copilot'
 type GeminiAssistMode = 'toc_seed' | 'detail_steps' | 'ocr_cleanup'
 
+type GeminiStructuredStepKind = 'process' | 'decision' | 'fact' | 'policy' | 'unclassified'
+
+type GeminiStructuredStep = {
+  kind: GeminiStructuredStepKind
+  title: string
+  notes: string
+  confidence: number | null
+}
+
+type GeminiStructuredSection = {
+  title: string
+  clusterHint?: string
+  steps: GeminiStructuredStep[]
+}
+
+type GeminiStructuredPayload = {
+  schemaVersion: 'import-model-v2'
+  clusters: string[]
+  sections: GeminiStructuredSection[]
+  cleanedText: string
+  warnings: string[]
+}
+
+function textFromStructuredGeminiPayload(payload: GeminiStructuredPayload): string {
+  if (payload.sections.length === 0) return payload.cleanedText.trim()
+  return payload.sections
+    .flatMap((section) => [
+      `# ${section.title}`,
+      ...section.steps.map((step) => {
+        const prefix = `[${step.kind}]`
+        return step.notes ? `${prefix} ${step.title}; ${step.notes}` : `${prefix} ${step.title}`
+      }),
+    ])
+    .join('\n')
+    .trim()
+}
+
 const DOCMAP_FILTER_OPTIONS: Array<{ id: DocMapFilter; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'context', label: 'Context' },
@@ -623,7 +660,16 @@ async function callGeminiViaProxy(params: {
   model: string
   mode: GeminiAssistMode
   source: string
-}): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+}): Promise<
+  | {
+      ok: true
+      text: string
+      mode?: GeminiAssistMode
+      warnings: string[]
+      structured: GeminiStructuredPayload | null
+    }
+  | { ok: false; error: string }
+> {
   const response = await fetch('/api/gemini/assist', {
     method: 'POST',
     headers: {
@@ -635,6 +681,9 @@ async function callGeminiViaProxy(params: {
   const payload = (await response.json().catch(() => ({}))) as {
     text?: string
     error?: string
+    mode?: GeminiAssistMode
+    warnings?: unknown
+    structured?: unknown
   }
 
   if (!response.ok) {
@@ -648,7 +697,14 @@ async function callGeminiViaProxy(params: {
   if (!text) {
     return { ok: false, error: 'Gemini proxy returned empty content.' }
   }
-  return { ok: true, text }
+  const warnings = Array.isArray(payload.warnings)
+    ? payload.warnings.filter((value): value is string => typeof value === 'string')
+    : []
+  const structured =
+    payload.structured && typeof payload.structured === 'object'
+      ? (payload.structured as GeminiStructuredPayload)
+      : null
+  return { ok: true, text, mode: payload.mode, warnings, structured }
 }
 
 function normalizeDocMapText(raw: string): string {
@@ -860,6 +916,7 @@ export default function App() {
   const [docMapTargetKind, setDocMapTargetKind] = useState<ImportDocumentMapKind>('importedMap')
   const [docMapContentFilter, setDocMapContentFilter] = useState<DocMapFilter>('all')
   const [docMapImportedFilter, setDocMapImportedFilter] = useState<DocMapFilter>('all')
+  const [docMapPanelsCollapsed, setDocMapPanelsCollapsed] = useState(false)
   const [importBusy, setImportBusy] = useState(false)
   const [qaBusy, setQaBusy] = useState(false)
   const [exportBusy, setExportBusy] = useState(false)
@@ -1753,14 +1810,20 @@ export default function App() {
         setHeaderNotice('Gemini OCR cleanup complete. Review text, then run import.')
         return
       }
-      const result = selectedMode === 'toc_seed' ? importFromText(transformed) : importFromAiAssist(transformed)
+      const importPayload =
+        gemini.structured && gemini.structured.schemaVersion === 'import-model-v2'
+          ? textFromStructuredGeminiPayload(gemini.structured)
+          : transformed
+      const result = selectedMode === 'toc_seed' ? importFromText(importPayload) : importFromAiAssist(importPayload)
       if (result.ok) {
         setTab('import_map')
         if (importStage === 'toc_seed' || importStage === 'confirmed') {
           setImportStage('detail_ingest')
         }
       }
-      setHeaderNotice(`Gemini assist complete (${selectedMode}). ${result.message}`)
+      const warningSuffix =
+        gemini.warnings.length > 0 ? ` Warnings: ${gemini.warnings.join(' ')}` : ''
+      setHeaderNotice(`Gemini assist complete (${selectedMode}). ${result.message}${warningSuffix}`)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Gemini assist failed.'
       setHeaderNotice(message)
@@ -2661,18 +2724,42 @@ export default function App() {
 
                 {selectedTab === 'import_map' && (
                   <section className="docmap-stack">
-                    {renderDocumentMapPanel({
-                      kind: 'contentMap',
-                      map: activeContentMap,
-                      filter: docMapContentFilter,
-                      setFilter: setDocMapContentFilter,
-                    })}
-                    {renderDocumentMapPanel({
-                      kind: 'importedMap',
-                      map: activeImportedMap,
-                      filter: docMapImportedFilter,
-                      setFilter: setDocMapImportedFilter,
-                    })}
+                    <div className="docmap-stack-head">
+                      <div className="docmap-stack-title-wrap">
+                        <strong>Document map review</strong>
+                        <span className="docmap-stack-subtitle">
+                          Content Map and Imported Map panels available for side-by-side QA.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="tiny-btn docmap-panel-toggle"
+                        onClick={() => setDocMapPanelsCollapsed((collapsed) => !collapsed)}
+                      >
+                        {docMapPanelsCollapsed ? 'Show document maps' : 'Hide document maps'}
+                      </button>
+                    </div>
+                    {docMapPanelsCollapsed ? (
+                      <div className="docmap-visible-note">
+                        Document map panels are hidden. Use "Show document maps" to re-open Content Map and
+                        Imported Map.
+                      </div>
+                    ) : (
+                      <>
+                        {renderDocumentMapPanel({
+                          kind: 'contentMap',
+                          map: activeContentMap,
+                          filter: docMapContentFilter,
+                          setFilter: setDocMapContentFilter,
+                        })}
+                        {renderDocumentMapPanel({
+                          kind: 'importedMap',
+                          map: activeImportedMap,
+                          filter: docMapImportedFilter,
+                          setFilter: setDocMapImportedFilter,
+                        })}
+                      </>
+                    )}
                   </section>
                 )}
 

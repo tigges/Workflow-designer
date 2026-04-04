@@ -221,6 +221,338 @@ function normalizeConfidence(value: unknown, fallback: number): number {
   return Math.max(0, Math.min(1, Number(value.toFixed(2))))
 }
 
+type ImportLineKind = 'heading' | 'process' | 'decision' | 'fact' | 'policy' | 'unclassified' | 'skip'
+
+type ParsedImportStep = {
+  kind: Exclude<ImportLineKind, 'heading' | 'skip'>
+  title: string
+  notes: string
+}
+
+type ParsedImportSection = {
+  title: string
+  steps: ParsedImportStep[]
+}
+
+type ImportBudgets = {
+  maxInputLines: number
+  maxProcessNodes: number
+  maxAnnotationNodes: number
+  maxTotalNodes: number
+  maxEdges: number
+  maxChildrenPerSection: number
+  maxTitleChars: number
+  maxNotesChars: number
+}
+
+const IMPORT_BUDGETS: ImportBudgets = {
+  maxInputLines: 600,
+  maxProcessNodes: 72,
+  maxAnnotationNodes: 24,
+  maxTotalNodes: 96,
+  maxEdges: 120,
+  maxChildrenPerSection: 12,
+  maxTitleChars: 72,
+  maxNotesChars: 280,
+}
+
+const NOISE_LINE_RE = /^(?:[-_=*#~\s]{4,}|page\s+\d+|\d+\s*\/\s*\d+|https?:\/\/\S+|www\.\S+)$/i
+const PAGE_MARKER_RE = /^--\s*\d+\s*(?:of|\/)\s*\d+\s*--$/i
+const HEADER_RE = /^(?:#{1,3}\s+.+|\d+(?:\.\d+)*\s+[A-Z].+|[A-Z][A-Z\s&/-]{8,})$/
+const BULLET_RE = /^[-*•]\s+/
+const NUMBERING_RE = /^(?:\d+[\).]|[a-z]\)|[ivx]+\.)\s+/i
+const DECISION_RE = /^(?:decision:|if |when |is |are |does |should |can |will |check |verify |confirm )/i
+const ACTION_RE =
+  /^(?:start:|end:|open |close |submit |check |review |verify |validate |escalate |inform |guide |cancel |update |create |send |resolve |process )/i
+const POLICY_RE =
+  /\b(?:policy|must|should|required|requirement|cannot|never|within|business day|sla|rule|mandatory)\b/i
+const FACT_RE =
+  /^(?:fact:|context:|background:|definition:|note:|statement:)|\b(?:means|defined as|refers to|currently|baseline|kpi)\b/i
+
+function normalizeLine(line: string): string {
+  return line.replace(/\s+/g, ' ').trim()
+}
+
+function clampText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value
+  const boundary = value.lastIndexOf(' ', maxChars - 1)
+  const end = boundary > 20 ? boundary : maxChars
+  return `${value.slice(0, end).trim()}...`
+}
+
+function stripLineMarkers(line: string): string {
+  return line.replace(BULLET_RE, '').replace(NUMBERING_RE, '').trim()
+}
+
+function splitTitleAndNotes(line: string, budgets: ImportBudgets): { title: string; notes: string } {
+  const withoutMarkers = stripLineMarkers(line)
+  const explicitTagMatch = withoutMarkers.match(/^\[(process|decision|fact|policy|unclassified)\]\s*(.+)$/i)
+  const normalized = normalizeLine(explicitTagMatch ? explicitTagMatch[2] : withoutMarkers)
+  const byDelimiter = normalized.match(/^(.{8,120}?)(?:\s*[;:]\s+|\s+[-–—]\s+)(.+)$/)
+  let title = byDelimiter ? byDelimiter[1].trim() : normalized
+  let notes = byDelimiter ? byDelimiter[2].trim() : ''
+
+  if (title.length > budgets.maxTitleChars) {
+    const compactTitle = clampText(title, budgets.maxTitleChars)
+    const overflow = title.slice(compactTitle.replace(/\.\.\.$/, '').length).trim()
+    title = compactTitle
+    notes = [overflow, notes].filter(Boolean).join(' ')
+  }
+
+  if (!title) title = 'Imported step'
+  notes = clampText(notes, budgets.maxNotesChars)
+  return { title, notes }
+}
+
+function classifyImportLine(rawLine: string): { kind: ImportLineKind; text: string } {
+  const cleaned = normalizeLine(rawLine)
+  if (!cleaned) return { kind: 'skip', text: '' }
+  if (NOISE_LINE_RE.test(cleaned) || PAGE_MARKER_RE.test(cleaned)) return { kind: 'skip', text: '' }
+  const tagged = cleaned.match(/^\[(process|decision|fact|policy|unclassified)\]\s*(.+)$/i)
+  if (tagged) {
+    return {
+      kind: tagged[1].toLowerCase() as ParsedImportStep['kind'],
+      text: tagged[2].trim(),
+    }
+  }
+  if (HEADER_RE.test(cleaned)) return { kind: 'heading', text: stripLineMarkers(cleaned) }
+  if (DECISION_RE.test(cleaned) || cleaned.includes('?')) return { kind: 'decision', text: cleaned }
+  if (POLICY_RE.test(cleaned)) return { kind: 'policy', text: cleaned }
+  if (FACT_RE.test(cleaned)) return { kind: 'fact', text: cleaned }
+  if (ACTION_RE.test(cleaned)) return { kind: 'process', text: cleaned }
+  if (cleaned.length < 8) return { kind: 'unclassified', text: cleaned }
+  return { kind: 'process', text: cleaned }
+}
+
+function parseSectionsFromText(text: string, budgets: ImportBudgets): {
+  sections: ParsedImportSection[]
+  warnings: string[]
+} {
+  const normalizedInput = text.replace(/\r\n?/g, '\n')
+  const rawLines = normalizedInput.split('\n')
+  const warnings: string[] = []
+  const limitedLines = rawLines.slice(0, budgets.maxInputLines)
+  if (rawLines.length > budgets.maxInputLines) {
+    warnings.push(`Input clipped to ${budgets.maxInputLines} lines.`)
+  }
+  const sections: ParsedImportSection[] = [{ title: 'General', steps: [] }]
+  let activeSection = sections[0]
+
+  for (const rawLine of limitedLines) {
+    const classified = classifyImportLine(rawLine)
+    if (classified.kind === 'skip') continue
+    if (classified.kind === 'heading') {
+      const headingTitle = splitTitleAndNotes(classified.text, budgets).title
+      activeSection = {
+        title: headingTitle || 'Section',
+        steps: [],
+      }
+      sections.push(activeSection)
+      continue
+    }
+    if (activeSection.steps.length >= budgets.maxChildrenPerSection) {
+      warnings.push(`Section "${activeSection.title}" clipped to ${budgets.maxChildrenPerSection} steps.`)
+      continue
+    }
+    const { title, notes } = splitTitleAndNotes(classified.text, budgets)
+    activeSection.steps.push({
+      kind: classified.kind,
+      title,
+      notes,
+    })
+  }
+
+  const filtered = sections.filter((section) => section.steps.length > 0)
+  return { sections: filtered.length > 0 ? filtered : [{ title: 'General', steps: [] }], warnings }
+}
+
+function buildModelFromSections(
+  sections: ParsedImportSection[],
+  options: {
+    origin: Origin
+    title: string
+    confidence: ConfidenceSummary
+    budgets: ImportBudgets
+    warnings: string[]
+  },
+): CanonicalModel {
+  const { origin, title, confidence, budgets, warnings } = options
+  const model = emptyModel(title)
+  model.confidence = confidence
+  const processNodes: FlowNode[] = []
+  const annotationNodes: FlowNode[] = []
+
+  sections.forEach((section) => {
+    const sectionTitle = section.title === 'General' ? '' : section.title
+    const processCandidates = section.steps.filter((step) => step.kind === 'process' || step.kind === 'decision')
+    if (
+      sectionTitle &&
+      processCandidates.length >= 2 &&
+      processNodes.length < budgets.maxProcessNodes
+    ) {
+      processNodes.push({
+        id: mkId('n'),
+        type: 'process',
+        label: clampText(`Section: ${sectionTitle}`, budgets.maxTitleChars),
+        actor: '',
+        status: 'live',
+        metadata: {
+          stage: sectionTitle,
+          touchpoint: sectionTitle,
+          notes: 'Imported section grouping',
+        },
+        origin,
+        confidence: 0.73,
+        position: { x: 0, y: 0 },
+      })
+    }
+
+    section.steps.forEach((step) => {
+      if (step.kind === 'process' || step.kind === 'decision') {
+        if (processNodes.length >= budgets.maxProcessNodes) {
+          warnings.push(`Process-node budget reached (${budgets.maxProcessNodes}).`)
+          return
+        }
+        const nodeType = step.kind === 'decision' ? 'decision' : inferNodeTypeFromText(step.title)
+        processNodes.push({
+          id: mkId('n'),
+          type: nodeType,
+          label: clampText(step.title, budgets.maxTitleChars),
+          actor: actorFromText(step.title),
+          status: 'live',
+          metadata: {
+            stage: sectionTitle || mapStage(processNodes.length, Math.max(2, processCandidates.length)),
+            touchpoint: sectionTitle || `Step ${processNodes.length + 1}`,
+            notes: step.notes,
+          },
+          origin,
+          confidence: normalizeConfidence(0.74 - processNodes.length * 0.005, 0.6),
+          position: { x: 0, y: 0 },
+        })
+        return
+      }
+
+      if (annotationNodes.length >= budgets.maxAnnotationNodes) {
+        warnings.push(`Annotation-node budget reached (${budgets.maxAnnotationNodes}).`)
+        return
+      }
+      const prefix = step.kind === 'fact' ? 'Fact' : step.kind === 'policy' ? 'Policy' : 'Unclassified'
+      annotationNodes.push({
+        id: mkId('n'),
+        type: 'annotation',
+        label: clampText(`${prefix}: ${step.title}`, budgets.maxTitleChars),
+        actor: '',
+        status: 'live',
+        metadata: {
+          stage: sectionTitle || 'Context',
+          touchpoint: sectionTitle || 'Context',
+          notes: step.notes,
+        },
+        origin,
+        confidence: 0.7,
+        position: { x: 0, y: 0 },
+      })
+    })
+  })
+
+  if (processNodes.length === 0) {
+    processNodes.push({
+      id: mkId('n'),
+      type: 'terminal',
+      label: 'Start: Review imported content',
+      actor: '',
+      status: 'live',
+      metadata: {
+        stage: 'Review',
+        touchpoint: 'Review',
+        notes: 'No process steps detected. Review annotations and source text.',
+      },
+      origin,
+      confidence: 0.62,
+      position: { x: 0, y: 0 },
+    })
+  }
+
+  if (processNodes.length > 0 && processNodes[0].type !== 'terminal') {
+    processNodes[0] = {
+      ...processNodes[0],
+      type: 'terminal',
+      label: clampText(`Start: ${processNodes[0].label.replace(/^Start:\s*/i, '')}`, budgets.maxTitleChars),
+    }
+  }
+  if (processNodes.length > 1 && processNodes[processNodes.length - 1].type !== 'terminal') {
+    const last = processNodes[processNodes.length - 1]
+    processNodes[processNodes.length - 1] = {
+      ...last,
+      type: 'terminal',
+      label: clampText(`End: ${last.label.replace(/^End:\s*/i, '')}`, budgets.maxTitleChars),
+    }
+  }
+
+  const edges: EdgeModel[] = []
+  for (let index = 0; index < processNodes.length - 1; index += 1) {
+    if (edges.length >= budgets.maxEdges) {
+      warnings.push(`Edge budget reached (${budgets.maxEdges}).`)
+      break
+    }
+    const fromNode = processNodes[index]
+    const toNode = processNodes[index + 1]
+    edges.push({
+      id: mkId('e'),
+      from: fromNode.id,
+      to: toNode.id,
+      type: detectParallelLabel(fromNode.label) ? 'parallel' : inferEdgeTypeForImported(fromNode, toNode),
+      label: fromNode.type === 'decision' ? 'Yes/No' : '',
+      origin,
+      confidence: 0.7,
+    })
+  }
+
+  let nodes = [...processNodes, ...annotationNodes]
+  if (nodes.length > budgets.maxTotalNodes) {
+    const overflow = nodes.length - budgets.maxTotalNodes
+    warnings.push(`Total-node budget reached (${budgets.maxTotalNodes}). Dropped ${overflow} trailing nodes.`)
+    nodes = nodes.slice(0, budgets.maxTotalNodes)
+  }
+
+  const processNodeIds = new Set(nodes.filter((node) => node.type !== 'annotation').map((node) => node.id))
+  const boundedEdges = edges.filter((edge) => processNodeIds.has(edge.from) && processNodeIds.has(edge.to))
+
+  const positionedNodes = nodes.map((node, index) => {
+    const isAnnotation = node.type === 'annotation'
+    const rel = isAnnotation ? annotationNodes.findIndex((item) => item.id === node.id) : processNodes.findIndex((item) => item.id === node.id)
+    const position = isAnnotation
+      ? {
+          x: 980 + (Math.max(rel, 0) % 2) * 220,
+          y: 120 + Math.floor(Math.max(rel, 0) / 2) * 118,
+        }
+      : {
+          x: 140 + (Math.max(rel, index) % 4) * 210,
+          y: 120 + Math.floor(Math.max(rel, index) / 4) * 140,
+        }
+    return { ...node, position }
+  })
+
+  model.nodes = positionedNodes
+  model.edges = boundedEdges
+  positionedNodes.forEach((node) => {
+    model.projections.flow.nodePositions[node.id] = node.position
+    model.projections.map.nodePositions[node.id] = {
+      x: node.position.x * 0.9,
+      y: node.position.y * 0.7,
+    }
+  })
+  if (warnings.length > 0) {
+    model.validation.push({
+      code: 'MISSING_EVIDENCE_AI_ELEMENT',
+      severity: 'info',
+      message: `Import normalization notes: ${warnings.join(' ')}`,
+    })
+  }
+  validate(model)
+  return model
+}
+
 function parseTocSeedClusters(text: string): string[] | null {
   const lines = text
     .split(/\r?\n/)
@@ -381,84 +713,14 @@ function assignStagesFromSeedClusters(model: CanonicalModel, clusters: string[])
 }
 
 function importModelFromText(text: string): CanonicalModel {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-
-  const model = emptyModel('Text Imported Flow')
-  model.confidence = { overall: 0.72, extraction: 0.74, synthesis: 0.75, validationPenalty: 0 }
-
-  if (lines.length === 0) {
-    validate(model)
-    return model
-  }
-
-  const processLines = lines.filter((line) => !line.startsWith('#'))
-  const nodes: FlowNode[] = []
-
-  processLines.forEach((line, index) => {
-    const type = inferNodeTypeFromText(line)
-    const id = mkId('n')
-    const normalizedLine = line.replace(/^[-*]\s*/, '')
-    const byDelimiter = normalizedLine.match(/^(.{10,90}?)(?:\s*[;:]\s+|\s+[-–—]\s+)(.+)$/)
-    const title = byDelimiter ? byDelimiter[1].trim() : normalizedLine
-    const notes = byDelimiter ? byDelimiter[2].trim() : ''
-    const node: FlowNode = {
-      id,
-      type,
-      label: title,
-      actor: actorFromText(line),
-      status: 'live',
-      metadata: {
-        stage: mapStage(index, processLines.length),
-        touchpoint: `Step ${index + 1}`,
-        notes,
-      },
-      origin: 'text_import',
-      confidence: normalizeConfidence(0.7 - index * 0.01, 0.65),
-      position: {
-        x: 140 + (index % 4) * 200,
-        y: 120 + Math.floor(index / 4) * 140,
-      },
-    }
-    nodes.push(node)
+  const { sections, warnings } = parseSectionsFromText(text, IMPORT_BUDGETS)
+  return buildModelFromSections(sections, {
+    origin: 'text_import',
+    title: 'Text Imported Flow',
+    confidence: { overall: 0.72, extraction: 0.74, synthesis: 0.75, validationPenalty: 0 },
+    budgets: IMPORT_BUDGETS,
+    warnings,
   })
-
-  if (nodes.length > 0 && nodes[0].type !== 'terminal') {
-    nodes[0] = { ...nodes[0], type: 'terminal', label: `Start: ${nodes[0].label}` }
-  }
-  if (nodes.length > 1 && nodes[nodes.length - 1].type !== 'terminal') {
-    const last = nodes[nodes.length - 1]
-    nodes[nodes.length - 1] = { ...last, type: 'terminal', label: `End: ${last.label}` }
-  }
-
-  const edges: EdgeModel[] = []
-  for (let index = 0; index < nodes.length - 1; index += 1) {
-    const fromNode = nodes[index]
-    const toNode = nodes[index + 1]
-    edges.push({
-      id: mkId('e'),
-      from: fromNode.id,
-      to: toNode.id,
-      type: detectParallelLabel(fromNode.label) ? 'parallel' : inferEdgeTypeForImported(fromNode, toNode),
-      label: fromNode.type === 'decision' ? 'Yes/No' : '',
-      origin: 'text_import',
-      confidence: 0.7,
-    })
-  }
-
-  model.nodes = nodes
-  model.edges = edges
-  nodes.forEach((node) => {
-    model.projections.flow.nodePositions[node.id] = node.position
-    model.projections.map.nodePositions[node.id] = {
-      x: node.position.x * 0.9,
-      y: node.position.y * 0.7,
-    }
-  })
-  validate(model)
-  return model
 }
 
 function importModelFromDoc(text: string): CanonicalModel {
