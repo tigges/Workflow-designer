@@ -153,6 +153,7 @@ export default function App() {
   }, [rfNodeSeed, rfEdgeSeed, setRfNodes, setRfEdges])
 
   const canUndo = history.length > 1 && historyIndex > 0
+  const hasFlowData = (currentModel?.nodes.length ?? 0) > 0
 
   function handleCreateProject() {
     const name = window.prompt('Project name', `Project ${projects.length + 1}`)
@@ -311,26 +312,35 @@ export default function App() {
             >
               + Node
             </button>
+            <span className="flow-help">Tip: drag from node handle to connect</span>
           </div>
 
           {selectedTab === 'flow' ? (
             <div className="canvas">
               {selectedVersion ? (
-                <ReactFlow
-                  nodes={rfNodes}
-                  edges={rfEdges}
-                  onNodesChange={onNodesChange}
-                  onEdgesChange={onEdgesChange}
-                  onConnect={handleConnect}
-                  onNodeDragStop={onDragStop}
-                  onNodeClick={(_, node) => selectNode(node.id)}
-                  onEdgeClick={(_, edge) => selectEdge(edge.id)}
-                  fitView
-                >
-                  <Background />
-                  <MiniMap />
-                  <Controls />
-                </ReactFlow>
+                <>
+                  {!hasFlowData && (
+                    <div className="hint-overlay">
+                      <strong>Start by clicking + Node</strong>
+                      <span>Then drag from one node handle to another to create a connection.</span>
+                    </div>
+                  )}
+                  <ReactFlow
+                    nodes={rfNodes}
+                    edges={rfEdges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={handleConnect}
+                    onNodeDragStop={onDragStop}
+                    onNodeClick={(_, node) => selectNode(node.id)}
+                    onEdgeClick={(_, edge) => selectEdge(edge.id)}
+                    fitView
+                  >
+                    <Background />
+                    <MiniMap />
+                    <Controls />
+                  </ReactFlow>
+                </>
               ) : (
                 <div className="canvas-empty">
                   <h3>No version selected</h3>

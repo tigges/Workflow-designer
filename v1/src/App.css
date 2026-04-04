@@ -135,6 +135,7 @@
 .tab-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -161,6 +162,29 @@
   background: #f9fbff;
   min-height: 520px;
   height: calc(100vh - 136px);
+}
+
+.flow-help {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  border: 1px solid #dfe5f0;
+  background: #f7faff;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.flow-help-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2d6ef5;
+}
+
+.flow-help-text {
+  font-size: 11px;
+  color: #647189;
 }
 
 .canvas-empty {
