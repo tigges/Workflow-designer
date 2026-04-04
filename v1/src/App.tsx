@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import {
   Background,
   Controls,
@@ -67,6 +67,12 @@ const ACTOR_OPTIONS: Array<{ value: Actor; label: string }> = [
 ]
 
 const MAP_PHASE_NAMES = ['Discover', 'Consider', 'Onboard', 'Use', 'Resolve', 'Retain']
+
+const FEATURE_AVAILABILITY = {
+  templates: false,
+  aiAssist: false,
+  importJson: false,
+} as const
 
 function actorText(actor: Actor) {
   if (!actor) return 'unassigned'
@@ -418,12 +424,17 @@ export default function App() {
     setHeaderNotice('Exported SVG snapshot successfully.')
   }
 
-  function handleImportJson(event: ChangeEvent<HTMLInputElement>) {
+  function handleImportJson(event: React.ChangeEvent<HTMLInputElement>) {
     if (event.target.files?.[0]) {
       setHeaderNotice(`Selected ${event.target.files[0].name}. Import adapter will be connected soon.`)
       return
     }
     setHeaderNotice('Import adapter will be connected in a following phase.')
+  }
+
+  function handlePreviewClick(event: MouseEvent, featureName: string) {
+    event.preventDefault()
+    setHeaderNotice(`${featureName} is visible in preview style and not usable yet.`)
   }
 
   function onDragStop() {
@@ -443,18 +454,28 @@ export default function App() {
           readOnly
         />
         <div className="header-sep" />
-        <nav className="header-tabs" aria-label="Templates">
-          {TEMPLATE_TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              className={`htab ${activeTemplate === tab ? 'active' : ''}`}
-              onClick={() => setActiveTemplate(tab)}
-            >
-              {tab}
-            </button>
-          ))}
-        </nav>
+        <div className="preview-wrap">
+          <nav className="header-tabs" aria-label="Templates">
+            {TEMPLATE_TABS.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                aria-disabled={!FEATURE_AVAILABILITY.templates}
+                className={`htab ${activeTemplate === tab ? 'active' : ''} ${!FEATURE_AVAILABILITY.templates ? 'preview-feature' : ''}`}
+                onClick={(event) => {
+                  if (!FEATURE_AVAILABILITY.templates) {
+                    handlePreviewClick(event, 'Template presets')
+                    return
+                  }
+                  setActiveTemplate(tab)
+                }}
+              >
+                {tab}
+              </button>
+            ))}
+          </nav>
+          {!FEATURE_AVAILABILITY.templates && <span className="preview-pill">Preview</span>}
+        </div>
         <div className="header-right">
           <button type="button" className="btn" onClick={handleValidateClick}>
             Validate
@@ -465,41 +486,80 @@ export default function App() {
           <button type="button" className="btn primary" onClick={handleExportSvg}>
             Export SVG
           </button>
-          <label className="btn import-btn">
+          <label
+            className={`btn import-btn ${!FEATURE_AVAILABILITY.importJson ? 'preview-feature' : ''}`}
+            onClick={(event) => {
+              if (!FEATURE_AVAILABILITY.importJson) handlePreviewClick(event, 'Import JSON')
+            }}
+          >
             Import JSON
-            <input type="file" accept="application/json" onChange={handleImportJson} />
+            <input
+              type="file"
+              accept="application/json"
+              onChange={handleImportJson}
+              disabled={!FEATURE_AVAILABILITY.importJson}
+            />
           </label>
         </div>
       </header>
 
       <main className="workspace">
         <aside className="sidebar">
-          <section className="ai-panel">
+          <section className={`ai-panel ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-section' : ''}`}>
             <div className="ai-panel-header">
               <div className="ai-badge">
                 <span className="ai-badge-dot" />
                 AI Assist
               </div>
+              {!FEATURE_AVAILABILITY.aiAssist && <span className="preview-pill">Preview</span>}
             </div>
             <div className="ai-chips">
               {AI_CHIPS.map((chip) => (
-                <button key={chip} type="button" className="ai-chip" onClick={() => setAiPrompt(`Draft a ${chip.toLowerCase()} workflow`)}>
+                <button
+                  key={chip}
+                  type="button"
+                  className={`ai-chip ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
+                  onClick={(event) => {
+                    if (!FEATURE_AVAILABILITY.aiAssist) {
+                      handlePreviewClick(event, 'AI Assist')
+                      return
+                    }
+                    setAiPrompt(`Draft a ${chip.toLowerCase()} workflow`)
+                  }}
+                >
                   {chip}
                 </button>
               ))}
             </div>
             <div className="ai-prompt-wrap">
               <textarea
-                className="ai-prompt"
+                className={`ai-prompt ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
                 value={aiPrompt}
                 onChange={(event) => setAiPrompt(event.target.value)}
-                placeholder="Describe a process to map"
+                readOnly={!FEATURE_AVAILABILITY.aiAssist}
+                placeholder={
+                  FEATURE_AVAILABILITY.aiAssist
+                    ? 'Describe a process to map'
+                    : 'AI Assist preview - generation will be enabled in a later phase'
+                }
               />
-              <button type="button" className="ai-send" title="Generate flow">
+              <button
+                type="button"
+                className={`ai-send ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
+                title="Generate flow"
+                disabled={!FEATURE_AVAILABILITY.aiAssist}
+                onClick={(event) => {
+                  if (!FEATURE_AVAILABILITY.aiAssist) handlePreviewClick(event, 'AI Assist')
+                }}
+              >
                 →
               </button>
             </div>
-            <div className="ai-status">Local fallback enabled.</div>
+            <div className="ai-status">
+              {FEATURE_AVAILABILITY.aiAssist
+                ? 'Local fallback enabled.'
+                : 'Preview only - AI generation is not wired yet.'}
+            </div>
           </section>
 
           <section className="sb-sec">
