@@ -74,11 +74,11 @@ Manual test notes for reviewer:
 
 ## Phase 8 — Export contracts
 
-- [ ] JSON export/import roundtrip is lossless
-- [ ] Mermaid export preserves structure
-- [ ] SVG export renders usable visual output
-- [ ] PNG export snapshot works
-- [ ] Export metadata tracked per artifact/version
+- [x] JSON export/import roundtrip is lossless
+- [x] Mermaid export preserves structure
+- [x] SVG export renders usable visual output
+- [x] PNG export snapshot works
+- [x] Export metadata tracked per artifact/version
 
 ## Phase 9 — Security + observability baseline
 

@@ -199,7 +199,10 @@ export async function sha256Hex(input: string | Blob): Promise<string> {
   } else {
     bytes = new Uint8Array(await input.arrayBuffer())
   }
-  const hash = await crypto.subtle.digest('SHA-256', bytes)
+  // Ensure digest input is backed by ArrayBuffer (not SharedArrayBuffer).
+  const digestInput = new Uint8Array(bytes.byteLength)
+  digestInput.set(bytes)
+  const hash = await crypto.subtle.digest('SHA-256', digestInput)
   return [...new Uint8Array(hash)].map((part) => part.toString(16).padStart(2, '0')).join('')
 }
 
