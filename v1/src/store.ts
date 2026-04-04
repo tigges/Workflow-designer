@@ -395,16 +395,18 @@ export const usePMStore = create<PMStore>((set, get) => ({
     })
   },
 
-  setVersionReviewState: (reviewState) => {
+  setVersionReviewState: (versionId, reviewState) => {
     set((state) => {
       const next = clone(state)
-      const ref = getCurrentVersionRef(next)
-      if (!ref) return state
-      ref.version.reviewState = normalizeReviewState(reviewState)
-      if (ref.version.reviewState === 'approved') {
-        ref.artifact.currentApprovedVersionId = ref.version.id
+      const artifact = next.artifacts.find((item) => item.id === next.selectedArtifactId)
+      if (!artifact) return state
+      const version = artifact.versions.find((item) => item.id === versionId)
+      if (!version) return state
+      version.reviewState = normalizeReviewState(reviewState)
+      if (version.reviewState === 'approved') {
+        artifact.currentApprovedVersionId = version.id
       }
-      ref.artifact.updatedAt = now()
+      artifact.updatedAt = now()
       persist(next)
       return next
     })

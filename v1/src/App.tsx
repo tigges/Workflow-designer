@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import {
   Background,
   Controls,
   Handle,
+  MarkerType,
   MiniMap,
   Position,
   ReactFlow,
@@ -16,57 +17,38 @@ import {
 import '@xyflow/react/dist/style.css'
 import './App.css'
 import { buildDefaultEdge, buildDefaultNode, edgeStroke, usePMStore } from './store'
-import type { Actor, EdgeType, FlowEdge, FlowNode, MapArtifact, MapVersion, ReviewState } from './types'
+import type {
+  Actor,
+  EdgeType,
+  FlowEdge,
+  FlowNode,
+  MapArtifact,
+  MapVersion,
+  ReviewState,
+} from './types'
 
-type RFNodeData = { label: string; actor: string; kind: FlowNode['type'] }
-
-function FlowNodeView({ data }: NodeProps<Node<RFNodeData>>) {
-  const colorByKind: Record<RFNodeData['kind'], string> = {
-    terminal: '#0f9e6e',
-    process: '#2d6ef5',
-    decision: '#8b45d4',
-    data: '#d4720f',
-    annotation: '#8a94a6',
-  }
-  const color = colorByKind[data.kind]
-  return (
-    <div className="flow-node-view" style={{ borderColor: `${color}66`, borderLeftColor: color }}>
-      <div className="flow-node-title">{data.label}</div>
-      <div className="flow-node-meta">{data.actor}</div>
-      <Handle type="target" position={Position.Top} className="flow-handle" />
-      <Handle type="source" position={Position.Bottom} className="flow-handle" />
-      <Handle type="source" position={Position.Right} className="flow-handle" />
-      <Handle type="target" position={Position.Left} className="flow-handle" />
-    </div>
-  )
+type RFNodeData = {
+  label: string
+  actor: Actor
+  kind: FlowNode['type']
+  status: FlowNode['status']
 }
 
-function toRFNode(node: FlowNode): Node<RFNodeData> {
-  return {
-    id: node.id,
-    position: node.position,
-    type: 'workflowNode',
-    data: {
-      label: node.label,
-      actor: node.actor || 'unassigned',
-      kind: node.type,
-    },
-  }
-}
+const TEMPLATE_TABS = ['Support', 'Onboarding', 'Sales', 'Blank'] as const
 
-function toRFEdge(edge: FlowEdge): Edge {
-  return {
-    id: edge.id,
-    source: edge.from,
-    target: edge.to,
-    label: edge.label,
-    animated: edge.type === 'parallel',
-    style: {
-      stroke: edgeStroke(edge.type),
-      strokeDasharray: edge.type === 'fallback' ? '5 3' : undefined,
-    },
-  }
-}
+const AI_CHIPS = ['Refund', 'Auth', 'Fulfillment', 'HR', 'Escalation', 'Approval']
+
+const NODE_TYPE_OPTIONS: Array<{
+  value: FlowNode['type']
+  label: string
+  desc: string
+}> = [
+  { value: 'process', label: 'Process', desc: 'Action step' },
+  { value: 'decision', label: 'Decision', desc: 'Branch logic' },
+  { value: 'terminal', label: 'Terminal', desc: 'Start/end point' },
+  { value: 'data', label: 'Data / System', desc: 'Integration' },
+  { value: 'annotation', label: 'Annotation', desc: 'Context note' },
+]
 
 const EDGE_OPTIONS: Array<{ value: EdgeType; label: string }> = [
   { value: 'sequential', label: 'Sequential' },
@@ -84,10 +66,91 @@ const ACTOR_OPTIONS: Array<{ value: Actor; label: string }> = [
   { value: 'external', label: 'External' },
 ]
 
-const JOURNEY_CHAPTERS = ['Discover', 'Consider', 'Onboard', 'Use', 'Resolve', 'Retain']
+const MAP_PHASE_NAMES = ['Discover', 'Consider', 'Onboard', 'Use', 'Resolve', 'Retain']
+
+function actorText(actor: Actor) {
+  if (!actor) return 'unassigned'
+  return actor
+}
+
+function actorLabel(actor: Actor) {
+  if (!actor) return 'Unassigned'
+  return actor.charAt(0).toUpperCase() + actor.slice(1)
+}
 
 function reviewOptions(): ReviewState[] {
   return ['draft', 'in_review', 'approved', 'rejected']
+}
+
+function escapeXml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;')
+}
+
+function FlowNodeView({ data }: NodeProps<Node<RFNodeData>>) {
+  return (
+    <div className={`fnode-card kind-${data.kind}`}>
+      <div className={`fnode-status-dot status-${data.status}`} />
+      <div className="fnode-label">{data.label}</div>
+      <div className="fnode-meta">
+        <span className={`actor-pill actor-${actorText(data.actor)}`}>{actorLabel(data.actor)}</span>
+      </div>
+      <Handle type="target" position={Position.Top} className="flow-handle top" />
+      <Handle type="source" position={Position.Bottom} className="flow-handle bottom" />
+      <Handle type="target" position={Position.Left} className="flow-handle left" />
+      <Handle type="source" position={Position.Right} className="flow-handle right" />
+    </div>
+  )
+}
+
+function toRFNode(node: FlowNode): Node<RFNodeData> {
+  return {
+    id: node.id,
+    position: node.position,
+    type: 'workflowNode',
+    data: {
+      label: node.label,
+      actor: node.actor,
+      kind: node.type,
+      status: node.status,
+    },
+  }
+}
+
+function toRFEdge(edge: FlowEdge): Edge {
+  const stroke = edgeStroke(edge.type)
+  return {
+    id: edge.id,
+    source: edge.from,
+    target: edge.to,
+    label: edge.label,
+    animated: edge.type === 'parallel',
+    className: `flow-edge edge-${edge.type}`,
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      color: stroke,
+      width: 16,
+      height: 16,
+    },
+    style: {
+      stroke,
+      strokeWidth: 1.7,
+      strokeDasharray: edge.type === 'fallback' ? '6 4' : undefined,
+    },
+    labelStyle: {
+      fill: stroke,
+      fontSize: 10,
+      fontWeight: 600,
+    },
+    labelBgStyle: {
+      fill: '#f8f9fb',
+      fillOpacity: 0.9,
+    },
+  }
 }
 
 export default function App() {
@@ -125,14 +188,21 @@ export default function App() {
     undoCurrentVersion,
   } = usePMStore()
 
+  const [activeTemplate, setActiveTemplate] = useState<(typeof TEMPLATE_TABS)[number]>('Support')
+  const [activeEdgeType, setActiveEdgeType] = useState<EdgeType>('sequential')
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [headerNotice, setHeaderNotice] = useState('')
+
   const selectedProject = useMemo(
     () => projects.find((p) => p.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
   )
+
   const projectArtifacts = useMemo(
     () => artifacts.filter((a) => a.projectId === selectedProjectId),
     [artifacts, selectedProjectId],
   )
+
   const selectedArtifact = useMemo(
     () => artifacts.find((a) => a.id === selectedArtifactId) ?? null,
     [artifacts, selectedArtifactId],
@@ -151,8 +221,14 @@ export default function App() {
   const selectedNode = currentModel?.nodes.find((n) => n.id === selectedNodeId) ?? null
   const selectedEdge = currentModel?.edges.find((e) => e.id === selectedEdgeId) ?? null
 
-  const rfNodeSeed = useMemo(() => (currentModel ? currentModel.nodes.map(toRFNode) : []), [currentModel])
-  const rfEdgeSeed = useMemo(() => (currentModel ? currentModel.edges.map(toRFEdge) : []), [currentModel])
+  const rfNodeSeed = useMemo(
+    () => (currentModel ? currentModel.nodes.map(toRFNode) : []),
+    [currentModel],
+  )
+  const rfEdgeSeed = useMemo(
+    () => (currentModel ? currentModel.edges.map(toRFEdge) : []),
+    [currentModel],
+  )
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(rfNodeSeed)
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(rfEdgeSeed)
   const nodeTypes = useMemo(() => ({ workflowNode: FlowNodeView }), [])
@@ -163,57 +239,74 @@ export default function App() {
   }, [rfNodeSeed, rfEdgeSeed, setRfNodes, setRfEdges])
 
   const canUndo = history.length > 1 && historyIndex > 0
-  const hasFlowData = (currentModel?.nodes.length ?? 0) > 0
+
   const mapActorBuckets = useMemo(() => {
     const nodes = currentModel?.nodes ?? []
-    const bucketOrder: Actor[] = ['customer', 'agent', 'system', 'manager', 'external', '']
-    const buckets = bucketOrder
+    const actorOrder: Actor[] = ['customer', 'agent', 'system', 'manager', 'external', '']
+    return actorOrder
       .map((actor) => ({
         actor: actor || 'unassigned',
-        label:
-          actor === ''
-            ? 'Unassigned'
-            : actor.charAt(0).toUpperCase() + actor.slice(1),
-        items: nodes.filter((node) => (node.actor || '') === actor),
+        label: actorLabel(actor),
+        items: nodes
+          .filter((node) => node.actor === actor)
+          .sort((a, b) => a.position.x - b.position.x),
       }))
       .filter((bucket) => bucket.items.length > 0)
-    return buckets
   }, [currentModel])
-  const mapPhases = useMemo(() => {
+
+  const mapChapters = useMemo(() => {
     const nodes = [...(currentModel?.nodes ?? [])].sort((a, b) => a.position.x - b.position.x)
-    if (nodes.length === 0) {
-      return JOURNEY_CHAPTERS.map((title, index) => ({
-        id: `chapter-${index + 1}`,
-        title,
-        summary: '0 steps',
-      }))
+    if (nodes.length === 0) return []
+
+    const stageMap = new Map<string, FlowNode[]>()
+    nodes.forEach((node) => {
+      const stage = node.metadata.stage?.trim()
+      if (!stage) return
+      const list = stageMap.get(stage) ?? []
+      list.push(node)
+      stageMap.set(stage, list)
+    })
+
+    if (stageMap.size >= 2) {
+      return [...stageMap.entries()].map(([stage, stageNodes], index) => {
+        const previewLabels = stageNodes.slice(0, 2).map((node) => node.label)
+        const extra = stageNodes.length - previewLabels.length
+        const summary =
+          previewLabels.length > 0
+            ? `${previewLabels.join(' -> ')}${extra > 0 ? ` +${extra} more` : ''}`
+            : 'No mapped steps'
+        return {
+          id: `stage-${index}`,
+          title: stage,
+          summary,
+          count: stageNodes.length,
+        }
+      })
     }
 
-    const xValues = nodes.map((node) => node.position.x)
-    const minX = Math.min(...xValues)
-    const maxX = Math.max(...xValues)
-    const span = Math.max(1, maxX - minX)
+    const chapterCount = Math.min(6, Math.max(2, Math.ceil(nodes.length / 2)))
+    const chapterSize = Math.ceil(nodes.length / chapterCount)
+    const chunks: Array<{ id: string; title: string; summary: string; count: number }> = []
 
-    return JOURNEY_CHAPTERS.map((title, index) => {
-      const start = minX + (index / JOURNEY_CHAPTERS.length) * span
-      const end = minX + ((index + 1) / JOURNEY_CHAPTERS.length) * span
-      const chapterNodes = nodes.filter((node) => {
-        if (index === JOURNEY_CHAPTERS.length - 1) {
-          return node.position.x >= start && node.position.x <= end
-        }
-        return node.position.x >= start && node.position.x < end
-      })
-      const labels = chapterNodes.slice(0, 2).map((node) => node.label)
-      const suffix = chapterNodes.length > labels.length ? ` +${chapterNodes.length - labels.length}` : ''
-      const preview = labels.length > 0 ? `${labels.join(' -> ')}${suffix}` : 'No mapped steps yet'
-      const countLabel = `${chapterNodes.length} step${chapterNodes.length === 1 ? '' : 's'}`
-
-      return {
-        id: `chapter-${index + 1}`,
+    for (let index = 0; index < nodes.length; index += chapterSize) {
+      const chunk = nodes.slice(index, index + chapterSize)
+      const chapterIndex = chunks.length
+      const title = MAP_PHASE_NAMES[chapterIndex] ?? `Chapter ${chapterIndex + 1}`
+      const previewLabels = chunk.slice(0, 2).map((node) => node.label)
+      const extra = chunk.length - previewLabels.length
+      const summary =
+        previewLabels.length > 0
+          ? `${previewLabels.join(' -> ')}${extra > 0 ? ` +${extra} more` : ''}`
+          : 'No mapped steps'
+      chunks.push({
+        id: `chapter-${chapterIndex}`,
         title,
-        summary: `${countLabel} • ${preview}`,
-      }
-    })
+        summary,
+        count: chunk.length,
+      })
+    }
+
+    return chunks
   }, [currentModel])
 
   function handleCreateProject() {
@@ -236,26 +329,17 @@ export default function App() {
     createVersion(selectedArtifactId, name)
   }
 
-  function handleAddNode(type: FlowNode['type'] = 'process') {
+  function handleAddNode(type: FlowNode['type']) {
     if (!currentModel) return
-    const node = buildDefaultNode(currentModel.nodes.length)
-    node.type = type
-    node.label =
-      type === 'decision'
-        ? 'Decision?'
-        : type === 'terminal'
-          ? 'Terminal'
-          : type === 'data'
-            ? 'Data / System'
-            : type === 'annotation'
-              ? 'Note'
-              : 'Process Step'
+    const node = buildDefaultNode(currentModel.nodes.length, type)
     addNodeToCurrentVersion(node)
   }
 
   function handleConnect(conn: Connection) {
     if (!conn.source || !conn.target) return
-    addEdgeToCurrentVersion(buildDefaultEdge(conn.source, conn.target))
+    const edge = buildDefaultEdge(conn.source, conn.target)
+    edge.type = activeEdgeType
+    addEdgeToCurrentVersion(edge)
   }
 
   function handleDeleteSelection() {
@@ -266,266 +350,400 @@ export default function App() {
     if (selectedEdgeId) removeEdgeFromCurrentVersion(selectedEdgeId)
   }
 
+  function handleValidateClick() {
+    if (!currentModel) {
+      setHeaderNotice('Select or create a version to validate.')
+      return
+    }
+    const warnOrErrorCount = validation.filter((item) => item.severity !== 'info').length
+    setHeaderNotice(
+      warnOrErrorCount === 0
+        ? 'Validation passed. No issues found.'
+        : `Validation found ${warnOrErrorCount} issue${warnOrErrorCount > 1 ? 's' : ''}.`,
+    )
+  }
+
+  function downloadFile(fileName: string, contents: string, mimeType: string) {
+    const blob = new Blob([contents], { type: mimeType })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = fileName
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function handleExportJson() {
+    if (!currentModel) {
+      setHeaderNotice('Nothing to export yet. Create or select a version first.')
+      return
+    }
+    downloadFile('flowcraft-export.json', JSON.stringify(currentModel, null, 2), 'application/json')
+    setHeaderNotice('Exported JSON successfully.')
+  }
+
+  function handleExportSvg() {
+    if (!currentModel) {
+      setHeaderNotice('Nothing to export yet. Create or select a version first.')
+      return
+    }
+    const width = 1400
+    const height = 900
+    const nodeById = new Map(currentModel.nodes.map((node) => [node.id, node]))
+    const edgeElements = currentModel.edges
+      .map((edge) => {
+        const source = nodeById.get(edge.from)
+        const target = nodeById.get(edge.to)
+        if (!source || !target) return ''
+        return `<line x1="${source.position.x + 70}" y1="${source.position.y + 28}" x2="${target.position.x + 70}" y2="${target.position.y + 28}" stroke="${edgeStroke(edge.type)}" stroke-width="1.7" />`
+      })
+      .join('')
+    const nodeElements = currentModel.nodes
+      .map((node) => {
+        const x = node.position.x
+        const y = node.position.y
+        return `
+        <rect x="${x}" y="${y}" rx="8" ry="8" width="140" height="56" fill="#ffffff" stroke="#d7dce5" />
+        <text x="${x + 10}" y="${y + 24}" fill="#1a1d23" font-family="DM Sans, Arial, sans-serif" font-size="12">${escapeXml(node.label)}</text>
+        <text x="${x + 10}" y="${y + 42}" fill="#647189" font-family="DM Sans, Arial, sans-serif" font-size="10">${escapeXml(actorLabel(node.actor))}</text>
+      `
+      })
+      .join('')
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <rect width="100%" height="100%" fill="#f8f9fb"/>
+      ${edgeElements}
+      ${nodeElements}
+    </svg>`
+    downloadFile('flowcraft-export.svg', svg, 'image/svg+xml')
+    setHeaderNotice('Exported SVG snapshot successfully.')
+  }
+
+  function handleImportJson(event: ChangeEvent<HTMLInputElement>) {
+    if (event.target.files?.[0]) {
+      setHeaderNotice(`Selected ${event.target.files[0].name}. Import adapter will be connected soon.`)
+      return
+    }
+    setHeaderNotice('Import adapter will be connected in a following phase.')
+  }
+
   function onDragStop() {
-    updateCurrentVersionLayoutFromRF(rfNodes.map((n) => ({ id: n.id, position: n.position })))
+    updateCurrentVersionLayoutFromRF(rfNodes.map((node) => ({ id: node.id, position: node.position })))
   }
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-dot" />
+      <header className="app-header">
+        <div className="logo">
+          <div className="logo-mark">✦</div>
           flowcraft
         </div>
-        <div className="top-actions">
-          <button type="button" className="btn ghost" onClick={undoCurrentVersion} disabled={!canUndo}>
-            Undo
+        <input
+          className="flow-title"
+          value={selectedArtifact?.name ?? 'Customer Support Journey'}
+          readOnly
+        />
+        <div className="header-sep" />
+        <nav className="header-tabs" aria-label="Templates">
+          {TEMPLATE_TABS.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              className={`htab ${activeTemplate === tab ? 'active' : ''}`}
+              onClick={() => setActiveTemplate(tab)}
+            >
+              {tab}
+            </button>
+          ))}
+        </nav>
+        <div className="header-right">
+          <button type="button" className="btn" onClick={handleValidateClick}>
+            Validate
           </button>
-          <button type="button" className="btn" onClick={handleDeleteSelection} disabled={!selectedNodeId && !selectedEdgeId}>
-            Delete Selected
+          <button type="button" className="btn" onClick={handleExportJson}>
+            Export JSON
           </button>
-          <button type="button" className="btn primary" onClick={handleCreateProject}>
-            New Project
+          <button type="button" className="btn primary" onClick={handleExportSvg}>
+            Export SVG
           </button>
+          <label className="btn import-btn">
+            Import JSON
+            <input type="file" accept="application/json" onChange={handleImportJson} />
+          </label>
         </div>
       </header>
 
       <main className="workspace">
-        <aside className="panel left-panel">
-          <h2>Projects</h2>
-          <div className="project-list">
-            {projects.map((project) => (
-              <button
-                key={project.id}
-                type="button"
-                className={`project-item ${project.id === selectedProjectId ? 'active' : ''}`}
-                onClick={() => selectProject(project.id)}
-              >
-                {project.name}
+        <aside className="sidebar">
+          <section className="ai-panel">
+            <div className="ai-panel-header">
+              <div className="ai-badge">
+                <span className="ai-badge-dot" />
+                AI Assist
+              </div>
+            </div>
+            <div className="ai-chips">
+              {AI_CHIPS.map((chip) => (
+                <button key={chip} type="button" className="ai-chip" onClick={() => setAiPrompt(`Draft a ${chip.toLowerCase()} workflow`)}>
+                  {chip}
+                </button>
+              ))}
+            </div>
+            <div className="ai-prompt-wrap">
+              <textarea
+                className="ai-prompt"
+                value={aiPrompt}
+                onChange={(event) => setAiPrompt(event.target.value)}
+                placeholder="Describe a process to map"
+              />
+              <button type="button" className="ai-send" title="Generate flow">
+                →
               </button>
-            ))}
-          </div>
-          <div className="left-panel-inline-actions">
+            </div>
+            <div className="ai-status">Local fallback enabled.</div>
+          </section>
+
+          <section className="sb-sec">
+            <div className="sb-row">
+              <div className="sb-label">Projects</div>
+              <button type="button" className="tiny-btn" onClick={handleCreateProject}>
+                + add
+              </button>
+            </div>
+            <div className="stack-list">
+              {projects.map((project) => (
+                <button
+                  key={project.id}
+                  type="button"
+                  className={`stack-btn ${project.id === selectedProjectId ? 'active' : ''}`}
+                  onClick={() => selectProject(project.id)}
+                >
+                  {project.name}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               className="tiny-btn danger"
-              onClick={() => {
-                if (selectedProjectId) deleteProject(selectedProjectId)
-              }}
+              onClick={() => selectedProjectId && deleteProject(selectedProjectId)}
               disabled={!selectedProjectId || projects.length <= 1}
             >
-              Delete Current
+              Delete current
             </button>
-          </div>
+          </section>
 
-          <div className="group">
-            <div className="group-head">
-              <h3>Artifacts</h3>
+          <section className="sb-sec">
+            <div className="sb-row">
+              <div className="sb-label">Artifacts</div>
               <button type="button" className="tiny-btn" onClick={handleCreateArtifact} disabled={!selectedProject}>
                 + add
               </button>
             </div>
-            <div className="list">
+            <div className="stack-list">
               {projectArtifacts.map((artifact: MapArtifact) => (
                 <button
                   key={artifact.id}
                   type="button"
-                  className={`list-item ${artifact.id === selectedArtifactId ? 'active' : ''}`}
+                  className={`stack-btn ${artifact.id === selectedArtifactId ? 'active' : ''}`}
                   onClick={() => selectArtifact(artifact.id)}
                 >
                   {artifact.name}
                 </button>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="group">
-            <div className="group-head">
-              <h3>Versions</h3>
+          <section className="sb-sec">
+            <div className="sb-row">
+              <div className="sb-label">Versions</div>
               <button type="button" className="tiny-btn" onClick={handleCreateVersion} disabled={!selectedArtifact}>
                 + add
               </button>
             </div>
-            <div className="list">
+            <div className="stack-list">
               {versions.map((version: MapVersion) => (
                 <button
                   key={version.id}
                   type="button"
-                  className={`list-item ${version.id === selectedVersionId ? 'active' : ''}`}
+                  className={`stack-btn ${version.id === selectedVersionId ? 'active' : ''}`}
                   onClick={() => selectVersion(version.id)}
                 >
                   {version.name}
                 </button>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="group">
-            <div className="group-head">
-              <h3>Node Types</h3>
+          <section className="sb-sec">
+            <div className="sb-label">Node Types</div>
+            {NODE_TYPE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className="pal-card"
+                onClick={() => handleAddNode(opt.value)}
+                disabled={!selectedVersion || selectedTab !== 'flow'}
+              >
+                <span className={`pal-shape shape-${opt.value}`} />
+                <span className="pal-info">
+                  <span className="pal-name">{opt.label}</span>
+                  <span className="pal-desc">{opt.desc}</span>
+                </span>
+              </button>
+            ))}
+          </section>
+
+          <section className="sb-sec">
+            <div className="sb-label">Connection Type</div>
+            <div className="ct-grid">
+              {EDGE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`ct-btn ${activeEdgeType === opt.value ? 'active' : ''}`}
+                  data-ct={opt.value}
+                  onClick={() => setActiveEdgeType(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
-            <div className="list">
-              <button type="button" className="list-item" onClick={() => handleAddNode('process')} disabled={!selectedVersion || selectedTab !== 'flow'}>
-                + Process
-              </button>
-              <button type="button" className="list-item" onClick={() => handleAddNode('decision')} disabled={!selectedVersion || selectedTab !== 'flow'}>
-                + Decision
-              </button>
-              <button type="button" className="list-item" onClick={() => handleAddNode('terminal')} disabled={!selectedVersion || selectedTab !== 'flow'}>
-                + Terminal
-              </button>
-              <button type="button" className="list-item" onClick={() => handleAddNode('data')} disabled={!selectedVersion || selectedTab !== 'flow'}>
-                + Data / System
-              </button>
-              <button type="button" className="list-item" onClick={() => handleAddNode('annotation')} disabled={!selectedVersion || selectedTab !== 'flow'}>
-                + Annotation
-              </button>
+          </section>
+
+          <section className="sb-sec">
+            <div className="sb-label">Validation</div>
+            <div className="val-list">
+              {validation.length === 0 ? (
+                <div className="val-row ok">Canvas ready</div>
+              ) : (
+                validation.map((issue) => (
+                  <div key={`${issue.code}-${issue.targetId || 'global'}`} className={`val-row ${issue.severity}`}>
+                    {issue.code}: {issue.message}
+                  </div>
+                ))
+              )}
             </div>
-          </div>
+          </section>
         </aside>
 
-        <section className="panel center-panel">
-          <div className="tab-row">
+        <section className="canvas-panel">
+          <div className="canvas-top">
             <button
               type="button"
-              className={`tab ${selectedTab === 'flow' ? 'active' : ''}`}
+              className={`tab-btn ${selectedTab === 'flow' ? 'active' : ''}`}
               onClick={() => setTab('flow')}
             >
               Journey Flow
             </button>
             <button
               type="button"
-              className={`tab ${selectedTab === 'map' ? 'active' : ''}`}
+              className={`tab-btn ${selectedTab === 'map' ? 'active' : ''}`}
               onClick={() => setTab('map')}
             >
               Journey Map
             </button>
             <button
               type="button"
-              className="btn small"
+              className="btn tiny"
               onClick={() => handleAddNode('process')}
               disabled={!selectedVersion || selectedTab !== 'flow'}
             >
               + Process Node
             </button>
-            <span className="flow-help">Tip: drag from node handle to connect</span>
+            <span className="flow-hint">Tip: drag from node handle to connect</span>
           </div>
 
-          {selectedTab === 'flow' ? (
-            <div className="canvas">
-              {selectedVersion ? (
-                <>
-                  {!hasFlowData && (
-                    <div className="hint-overlay">
-                      <strong>Start by clicking + Node</strong>
-                      <span>Then drag from one node handle to another to create a connection.</span>
-                    </div>
-                  )}
-                  <ReactFlow
-                    nodes={rfNodes}
-                    edges={rfEdges}
-                    onNodesChange={onNodesChange}
-                    onEdgesChange={onEdgesChange}
-                    onConnect={handleConnect}
-                    onNodeDragStop={onDragStop}
-                    onNodeClick={(_, node) => selectNode(node.id)}
-                    onEdgeClick={(_, edge) => selectEdge(edge.id)}
+          <div className="canvas-wrap">
+            {selectedTab === 'flow' ? (
+              selectedVersion ? (
+                <ReactFlow
+                  nodes={rfNodes}
+                  edges={rfEdges}
+                  onNodesChange={onNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  onConnect={handleConnect}
+                  onNodeDragStop={onDragStop}
+                  onNodeClick={(_, node) => selectNode(node.id)}
+                  onEdgeClick={(_, edge) => selectEdge(edge.id)}
+                  onPaneClick={() => {
+                    selectNode(null)
+                    selectEdge(null)
+                  }}
                   nodeTypes={nodeTypes}
                   nodesDraggable
                   nodesConnectable
                   elementsSelectable
-                  edgesFocusable
-                  panOnDrag
-                    fitView
-                  >
-                    <Background />
-                    <MiniMap />
-                    <Controls />
-                  </ReactFlow>
-                </>
+                  fitView
+                >
+                  <Background gap={24} color="#e6eaf1" />
+                  <MiniMap />
+                  <Controls />
+                </ReactFlow>
               ) : (
                 <div className="canvas-empty">
                   <h3>No version selected</h3>
-                  <p>Select or create artifact/version to begin.</p>
+                  <p>Select or create an artifact/version to begin.</p>
                 </div>
-              )}
-            </div>
-          ) : (
-            <div className="canvas">
-              {selectedVersion ? (
-                <div className="map-view">
-                  <section className="map-phase-section">
-                    <div className="map-phase-head">
-                      <strong>Flow Map Phases</strong>
-                      <span>Horizontal phases derived from the journey flow order.</span>
-                    </div>
-                    <div className="map-phase-strip" role="list" aria-label="Flow map phases">
-                      {mapPhases.length === 0 ? (
-                        <div className="map-phase-empty">Add flow nodes to generate map phases.</div>
-                      ) : (
-                        mapPhases.map((phase) => (
-                          <article key={phase.id} role="listitem" className="map-phase-chip">
-                            <h4>{phase.title}</h4>
-                            <p>{phase.summary}</p>
-                          </article>
-                        ))
-                      )}
-                    </div>
-                  </section>
-                  <div className="map-header">
-                    <h3>Journey Map Projection</h3>
-                    <p>Phase 5 view of the same canonical model, grouped by actor lanes.</p>
+              )
+            ) : selectedVersion ? (
+              <div className="map-view">
+                <div className="map-header">
+                  <h3>Journey Map Projection</h3>
+                  <p>Chapter guide across the full map, then actor layers.</p>
+                </div>
+
+                <section className="map-phase-guide">
+                  <div className="map-phase-head">
+                    <strong>Map Phases</strong>
+                    <span>Chapter overview above customer layer</span>
                   </div>
-                  {mapActorBuckets.length === 0 ? (
-                    <div className="canvas-empty">
-                      <h3>No mapped steps yet</h3>
-                      <p>Add nodes in Journey Flow and assign actor values to populate this map.</p>
-                    </div>
-                  ) : (
-                    <>
-                      <section className="map-phase-section">
-                        <div className="map-phase-head">
-                          <strong>Map Chapters</strong>
-                          <span>Overview of the full journey, shown above the customer lane.</span>
-                        </div>
-                        <div className="map-phase-strip" role="list" aria-label="Flow map phases">
-                          {mapPhases.map((phase) => (
-                            <article key={phase.id} role="listitem" className="map-phase-chip">
-                              <h4>{phase.title}</h4>
-                              <p>{phase.summary}</p>
+                  <div className="map-phase-strip">
+                    {mapChapters.length === 0 ? (
+                      <div className="map-phase-empty">Add nodes in Journey Flow to generate chapter phases.</div>
+                    ) : (
+                      mapChapters.map((chapter) => (
+                        <article key={chapter.id} className="map-phase-chip">
+                          <h4>{chapter.title}</h4>
+                          <p>{chapter.summary}</p>
+                          <span className="count-pill">{chapter.count} steps</span>
+                        </article>
+                      ))
+                    )}
+                  </div>
+                </section>
+
+                {mapActorBuckets.length === 0 ? (
+                  <div className="canvas-empty">
+                    <h3>No mapped lanes yet</h3>
+                    <p>Add and assign actors in Journey Flow to populate the map layers.</p>
+                  </div>
+                ) : (
+                  <div className="lane-list">
+                    {mapActorBuckets.map((bucket) => (
+                      <section key={bucket.actor} className="lane">
+                        <div className="lane-title">{bucket.label}</div>
+                        <div className="lane-items">
+                          {bucket.items.map((node) => (
+                            <article key={node.id} className={`lane-node ${node.type}`}>
+                              <strong>{node.label}</strong>
+                              <span>{node.type}</span>
                             </article>
                           ))}
                         </div>
                       </section>
-                      <div className="lane-list">
-                        {mapActorBuckets.map((bucket) => (
-                          <section key={bucket.actor} className="lane">
-                            <div className="lane-title">{bucket.label}</div>
-                            <div className="lane-items">
-                              {bucket.items.map((node) => (
-                                <article key={node.id} className={`lane-node ${node.type}`}>
-                                  <strong>{node.label}</strong>
-                                  <span>{node.type}</span>
-                                </article>
-                              ))}
-                            </div>
-                          </section>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="canvas-empty">
-                  <h3>No version selected</h3>
-                  <p>Select or create artifact/version to view the Journey Map.</p>
-                </div>
-              )}
-            </div>
-          )}
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="canvas-empty">
+                <h3>No version selected</h3>
+                <p>Select or create an artifact/version to view the Journey Map.</p>
+              </div>
+            )}
+          </div>
         </section>
 
-        <aside className="panel right-panel">
+        <aside className="inspector">
           <h2>Inspector</h2>
 
           {selectedVersion ? (
@@ -534,7 +752,9 @@ export default function App() {
               <select
                 id="reviewState"
                 value={selectedVersion.reviewState}
-                onChange={(e) => setVersionReviewState(selectedVersion.id, e.target.value as ReviewState)}
+                onChange={(event) =>
+                  setVersionReviewState(selectedVersion.id, event.target.value as ReviewState)
+                }
               >
                 {reviewOptions().map((state) => (
                   <option key={state} value={state}>
@@ -556,7 +776,7 @@ export default function App() {
                   id="nodeLabel"
                   type="text"
                   value={selectedNode.label}
-                  onChange={(e) => updateNodeLabel(selectedNode.id, e.target.value)}
+                  onChange={(event) => updateNodeLabel(selectedNode.id, event.target.value)}
                 />
               </div>
               <div className="field-group">
@@ -564,7 +784,7 @@ export default function App() {
                 <select
                   id="nodeActor"
                   value={selectedNode.actor}
-                  onChange={(e) => updateNodeActor(selectedNode.id, e.target.value as Actor)}
+                  onChange={(event) => updateNodeActor(selectedNode.id, event.target.value as Actor)}
                 >
                   {ACTOR_OPTIONS.map((opt) => (
                     <option key={opt.value || 'unassigned'} value={opt.value}>
@@ -585,7 +805,7 @@ export default function App() {
                 <select
                   id="edgeType"
                   value={selectedEdge.type}
-                  onChange={(e) => updateEdgeType(selectedEdge.id, e.target.value as EdgeType)}
+                  onChange={(event) => updateEdgeType(selectedEdge.id, event.target.value as EdgeType)}
                 >
                   {EDGE_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -595,48 +815,42 @@ export default function App() {
                 </select>
               </div>
               <div className="field-group">
-                <label htmlFor="edgeLabel">Edge Label</label>
+                <label htmlFor="edgeLabel">Edge label</label>
                 <input
                   id="edgeLabel"
                   type="text"
                   value={selectedEdge.label ?? ''}
-                  onChange={(e) => updateEdgeLabel(selectedEdge.id, e.target.value)}
+                  onChange={(event) => updateEdgeLabel(selectedEdge.id, event.target.value)}
                 />
               </div>
             </>
           ) : (
-            <p className="muted">No node/edge selected.</p>
+            <p className="muted">Select a node or connection to edit properties.</p>
           )}
 
-          <h2 style={{ marginTop: 14 }}>Validation</h2>
-          <div className="validation-list">
-            {validation.length === 0 ? (
-              <div className="validation-item info">Flow looks valid.</div>
-            ) : (
-              validation.map((v) => (
-                <div key={`${v.code}-${v.targetId || 'global'}`} className={`validation-item ${v.severity}`}>
-                  <strong>{v.code}</strong>: {v.message}
-                </div>
-              ))
-            )}
+          <div className="inspector-actions">
+            <button
+              type="button"
+              className="btn danger full"
+              onClick={handleDeleteSelection}
+              disabled={!selectedNodeId && !selectedEdgeId}
+            >
+              Delete selected
+            </button>
+            <button type="button" className="btn full" onClick={undoCurrentVersion} disabled={!canUndo}>
+              Undo
+            </button>
           </div>
         </aside>
       </main>
 
       <footer className="statusbar">
-        <span>
-          Project: <strong>{selectedProject?.name ?? 'None'}</strong>
-        </span>
-        <span>
-          Artifact: <strong>{selectedArtifact?.name ?? 'None'}</strong>
-        </span>
-        <span>
-          Version: <strong>{selectedVersion?.name ?? 'None'}</strong>
-        </span>
-        <span style={{ marginLeft: 'auto' }}>
-          Nodes: <strong>{currentModel?.nodes.length ?? 0}</strong> | Edges:{' '}
-          <strong>{currentModel?.edges.length ?? 0}</strong>
-        </span>
+        <span className="sb-val">{currentModel?.nodes.length ?? 0} nodes</span>
+        <span className="sb-sep">|</span>
+        <span>{currentModel?.edges.length ?? 0} connections</span>
+        <span className="sb-sep">|</span>
+        <span>{selectedTab}</span>
+        <span className="sb-hint">{headerNotice || 'Drag nodes to canvas - connect with handles - edit in right panel'}</span>
       </footer>
     </div>
   )
