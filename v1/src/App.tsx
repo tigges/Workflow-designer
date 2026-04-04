@@ -88,6 +88,14 @@ function reviewOptions(): ReviewState[] {
   return ['draft', 'in_review', 'approved', 'rejected']
 }
 
+const PHASES: Array<{ key: 'p1' | 'p2' | 'p3' | 'p4' | 'p5'; title: string; subtitle: string }> = [
+  { key: 'p1', title: 'Phase 1', subtitle: 'App shell + layout' },
+  { key: 'p2', title: 'Phase 2', subtitle: 'Canonical model + state' },
+  { key: 'p3', title: 'Phase 3', subtitle: 'Workspace CRUD + persistence' },
+  { key: 'p4', title: 'Phase 4', subtitle: 'Journey Flow editor' },
+  { key: 'p5', title: 'Phase 5', subtitle: 'Journey Map projection' },
+]
+
 export default function App() {
   const {
     projects,
@@ -251,6 +259,29 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      <section className="phase-strip-wrap">
+        <div className="phase-strip-head">
+          <strong>Phases</strong>
+          <span>Phase 4 and Phase 5 are now enabled in this build.</span>
+        </div>
+        <div className="phase-strip" role="list" aria-label="Implementation phases">
+          {PHASES.map((phase) => {
+            const isActive = (selectedTab === 'flow' && phase.key === 'p4') || (selectedTab === 'map' && phase.key === 'p5')
+            const isCompleted = ['p1', 'p2', 'p3', 'p4', 'p5'].includes(phase.key)
+            return (
+              <article
+                key={phase.key}
+                role="listitem"
+                className={`phase-chip ${isActive ? 'active' : ''} ${isCompleted ? 'done' : ''}`}
+              >
+                <h3>{phase.title}</h3>
+                <p>{phase.subtitle}</p>
+              </article>
+            )
+          })}
+        </div>
+      </section>
 
       <main className="workspace">
         <aside className="panel left-panel">
