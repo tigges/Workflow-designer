@@ -272,7 +272,6 @@ export default function App() {
   const [activeTemplate, setActiveTemplate] = useState<(typeof TEMPLATE_TABS)[number]>('Support')
   const [activeEdgeType, setActiveEdgeType] = useState<EdgeType>('sequential')
   const [edgeMode, setEdgeMode] = useState<EdgeMode>(() => readStoredEdgeMode())
-  const [importTextDraft, setImportTextDraft] = useState('')
   const [draftSourceType, setDraftSourceType] = useState<DraftSourceType>('text')
   const [importBusy, setImportBusy] = useState(false)
   const [importMenuOpen, setImportMenuOpen] = useState(false)
@@ -622,9 +621,9 @@ export default function App() {
   }
 
   function handleImportText() {
-    const result = importFromText(importTextDraft)
+    const result = importFromText(aiPrompt)
     setHeaderNotice(result.message)
-    if (result.ok) setImportTextDraft('')
+    if (result.ok) setAiPrompt('')
   }
 
   function handleImportDraftBySelectedSource() {
@@ -636,8 +635,9 @@ export default function App() {
   }
 
   function handleImportDocumentFromDraft() {
-    const result = importFromDocument(importTextDraft)
+    const result = importFromDocument(aiPrompt)
     setHeaderNotice(result.message)
+    if (result.ok) setAiPrompt('')
   }
 
   async function handleImportDocumentFile(event: React.ChangeEvent<HTMLInputElement>) {
@@ -815,6 +815,76 @@ export default function App() {
 
       <main className="workspace">
         <aside className="sidebar">
+          <section className={`ai-panel ai-top ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-section' : ''}`}>
+            <div className="ai-panel-header">
+              <div className="ai-badge">
+                <span className="ai-badge-dot" />
+                AI Assist
+              </div>
+              {!FEATURE_AVAILABILITY.aiAssist && <span className="preview-pill">Preview</span>}
+            </div>
+            <div className="ai-chips">
+              {AI_CHIPS.map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  className={`ai-chip ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
+                  onClick={(event) => {
+                    if (!FEATURE_AVAILABILITY.aiAssist) {
+                      handlePreviewClick(event, 'AI Assist')
+                      return
+                    }
+                    setAiPrompt(`Draft a ${chip.toLowerCase()} workflow`)
+                  }}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+            <div className="sb-subhead">Draft Input</div>
+            <div className="ai-prompt-wrap">
+              <textarea
+                className={`ai-prompt ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
+                value={aiPrompt}
+                onChange={(event) => setAiPrompt(event.target.value)}
+                readOnly={!FEATURE_AVAILABILITY.aiAssist}
+                placeholder={
+                  FEATURE_AVAILABILITY.aiAssist
+                    ? 'Type process draft here. This same text is used by top-right Import draft.'
+                    : 'AI Assist preview - generation will be enabled in a later phase'
+                }
+              />
+              <button
+                type="button"
+                className={`ai-send ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
+                title="Generate flow"
+                disabled={!FEATURE_AVAILABILITY.aiAssist}
+                onClick={(event) => {
+                  if (!FEATURE_AVAILABILITY.aiAssist) {
+                    handlePreviewClick(event, 'AI Assist')
+                    return
+                  }
+                  handleAiAssistGenerate()
+                }}
+              >
+                →
+              </button>
+            </div>
+            <div className="ai-status">
+              {FEATURE_AVAILABILITY.aiAssist
+                ? 'Shared draft input: use top-right Import with Text notes or Document extract.'
+                : 'Preview only - AI generation is not wired yet.'}
+            </div>
+            <div className="ct-grid">
+              <button type="button" className="ct-btn" onClick={handleSendToReview}>
+                Send Current Version to Review
+              </button>
+              <button type="button" className="ct-btn" onClick={handleAutoGate}>
+                Auto Gate by Policy
+              </button>
+            </div>
+          </section>
+
           <section className="sb-sec build-sec">
             <div className="sb-row">
               <div className="sb-label">Build</div>
@@ -1021,75 +1091,9 @@ export default function App() {
             </button>
             {!previewOpen && <div className="collapsed-note">Collapsed by default to keep build tools focused.</div>}
             {previewOpen && (
-              <section className={`ai-panel ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-section' : ''}`}>
-                <div className="ai-panel-header">
-                  <div className="ai-badge">
-                    <span className="ai-badge-dot" />
-                    AI Assist
-                  </div>
-                  {!FEATURE_AVAILABILITY.aiAssist && <span className="preview-pill">Preview</span>}
-                </div>
-                <div className="ai-chips">
-                  {AI_CHIPS.map((chip) => (
-                    <button
-                      key={chip}
-                      type="button"
-                      className={`ai-chip ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
-                      onClick={(event) => {
-                        if (!FEATURE_AVAILABILITY.aiAssist) {
-                          handlePreviewClick(event, 'AI Assist')
-                          return
-                        }
-                        setAiPrompt(`Draft a ${chip.toLowerCase()} workflow`)
-                      }}
-                    >
-                      {chip}
-                    </button>
-                  ))}
-                </div>
-                <div className="sb-subhead">Prompt</div>
-                <div className="ai-prompt-wrap">
-                  <textarea
-                    className={`ai-prompt ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
-                    value={aiPrompt}
-                    onChange={(event) => setAiPrompt(event.target.value)}
-                    readOnly={!FEATURE_AVAILABILITY.aiAssist}
-                    placeholder={
-                      FEATURE_AVAILABILITY.aiAssist
-                        ? 'Describe a process to map'
-                        : 'AI Assist preview - generation will be enabled in a later phase'
-                    }
-                  />
-                  <button
-                    type="button"
-                    className={`ai-send ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
-                    title="Generate flow"
-                    disabled={!FEATURE_AVAILABILITY.aiAssist}
-                    onClick={(event) => {
-                      if (!FEATURE_AVAILABILITY.aiAssist) {
-                        handlePreviewClick(event, 'AI Assist')
-                        return
-                      }
-                      handleAiAssistGenerate()
-                    }}
-                  >
-                    →
-                  </button>
-                </div>
-                <div className="ai-status">
-                  {FEATURE_AVAILABILITY.aiAssist
-                    ? 'Local fallback enabled.'
-                    : 'Preview only - AI generation is not wired yet.'}
-                </div>
-                <div className="ct-grid">
-                  <button type="button" className="ct-btn" onClick={handleSendToReview}>
-                    Send Current Version to Review
-                  </button>
-                  <button type="button" className="ct-btn" onClick={handleAutoGate}>
-                    Auto Gate by Policy
-                  </button>
-                </div>
-              </section>
+              <div className="collapsed-note">
+                Additional preview widgets will appear here as they are introduced.
+              </div>
             )}
           </section>
         </aside>

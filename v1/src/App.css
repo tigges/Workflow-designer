@@ -294,6 +294,31 @@
   padding: 8px 10px;
 }
 
+.menu-inline-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px 6px;
+}
+
+.menu-inline-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #7a869a;
+}
+
+.menu-inline-select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 7px 9px;
+}
+
 .menu-textarea {
   width: 100%;
   min-height: 72px;
