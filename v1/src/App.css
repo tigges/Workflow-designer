@@ -245,6 +245,133 @@
   overflow-y: auto;
 }
 
+.left-stack {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.left-stack .sb-sec {
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+}
+
+.left-stack .sb-sec:first-child {
+  border-top: none;
+}
+
+.section-header {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  text-align: left;
+}
+
+.section-header.static {
+  cursor: default;
+}
+
+.section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.caret {
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid #7a869a;
+  border-bottom: 1.5px solid #7a869a;
+  transform: rotate(-45deg);
+  transition: transform 0.16s ease;
+}
+
+.caret.expanded {
+  transform: rotate(45deg);
+}
+
+.section-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.build-sec {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.section-note {
+  font-size: 10px;
+  color: #2d6ef5;
+  background: rgba(45, 110, 245, 0.1);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-weight: 700;
+}
+
+.sb-subhead {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #7a869a;
+  margin: 2px 0 4px;
+}
+
+.build-hint {
+  font-size: 10px;
+  color: #5f6f88;
+  background: #eef4ff;
+  border: 1px solid #d7e4ff;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.collapsible {
+  padding-top: 10px;
+}
+
+.collapse-head {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.collapse-indicator {
+  width: 18px;
+  height: 18px;
+  border: 1px solid #d0d7e4;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: #62708a;
+  line-height: 1;
+}
+
+.collapsed-note {
+  font-size: 10px;
+  color: #7a869a;
+  border: 1px dashed #d0d7e4;
+  background: #f7f9fc;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
 .ai-panel {
   padding: 12px;
   border-bottom: 1px solid var(--border);

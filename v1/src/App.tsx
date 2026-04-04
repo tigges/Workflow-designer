@@ -219,6 +219,8 @@ export default function App() {
   const [activeEdgeType, setActiveEdgeType] = useState<EdgeType>('sequential')
   const [aiPrompt, setAiPrompt] = useState('')
   const [headerNotice, setHeaderNotice] = useState('')
+  const [structureOpen, setStructureOpen] = useState(true)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance<Node<RFNodeData>, Edge> | null>(
     null,
   )
@@ -572,136 +574,15 @@ export default function App() {
 
       <main className="workspace">
         <aside className="sidebar">
-          <section className={`ai-panel ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-section' : ''}`}>
-            <div className="ai-panel-header">
-              <div className="ai-badge">
-                <span className="ai-badge-dot" />
-                AI Assist
-              </div>
-              {!FEATURE_AVAILABILITY.aiAssist && <span className="preview-pill">Preview</span>}
-            </div>
-            <div className="ai-chips">
-              {AI_CHIPS.map((chip) => (
-                <button
-                  key={chip}
-                  type="button"
-                  className={`ai-chip ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
-                  onClick={(event) => {
-                    if (!FEATURE_AVAILABILITY.aiAssist) {
-                      handlePreviewClick(event, 'AI Assist')
-                      return
-                    }
-                    setAiPrompt(`Draft a ${chip.toLowerCase()} workflow`)
-                  }}
-                >
-                  {chip}
-                </button>
-              ))}
-            </div>
-            <div className="ai-prompt-wrap">
-              <textarea
-                className={`ai-prompt ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
-                value={aiPrompt}
-                onChange={(event) => setAiPrompt(event.target.value)}
-                readOnly={!FEATURE_AVAILABILITY.aiAssist}
-                placeholder={
-                  FEATURE_AVAILABILITY.aiAssist
-                    ? 'Describe a process to map'
-                    : 'AI Assist preview - generation will be enabled in a later phase'
-                }
-              />
-              <button
-                type="button"
-                className={`ai-send ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
-                title="Generate flow"
-                disabled={!FEATURE_AVAILABILITY.aiAssist}
-                onClick={(event) => {
-                  if (!FEATURE_AVAILABILITY.aiAssist) handlePreviewClick(event, 'AI Assist')
-                }}
-              >
-                →
-              </button>
-            </div>
-            <div className="ai-status">
-              {FEATURE_AVAILABILITY.aiAssist
-                ? 'Local fallback enabled.'
-                : 'Preview only - AI generation is not wired yet.'}
-            </div>
-          </section>
-
-          <section className="sb-sec">
+          <section className="sb-sec build-sec">
             <div className="sb-row">
-              <div className="sb-label">Projects</div>
-              <button type="button" className="tiny-btn" onClick={handleCreateProject}>
-                + add
-              </button>
+              <div className="sb-label">Build</div>
+              <span className="section-note">Pinned</span>
             </div>
-            <div className="stack-list">
-              {projects.map((project) => (
-                <button
-                  key={project.id}
-                  type="button"
-                  className={`stack-btn ${project.id === selectedProjectId ? 'active' : ''}`}
-                  onClick={() => selectProject(project.id)}
-                >
-                  {project.name}
-                </button>
-              ))}
+            <div className="build-hint">
+              Add node types first, then pick connection type and draw links on canvas.
             </div>
-            <button
-              type="button"
-              className="tiny-btn danger"
-              onClick={() => selectedProjectId && deleteProject(selectedProjectId)}
-              disabled={!selectedProjectId || projects.length <= 1}
-            >
-              Delete current
-            </button>
-          </section>
-
-          <section className="sb-sec">
-            <div className="sb-row">
-              <div className="sb-label">Artifacts</div>
-              <button type="button" className="tiny-btn" onClick={handleCreateArtifact} disabled={!selectedProject}>
-                + add
-              </button>
-            </div>
-            <div className="stack-list">
-              {projectArtifacts.map((artifact: MapArtifact) => (
-                <button
-                  key={artifact.id}
-                  type="button"
-                  className={`stack-btn ${artifact.id === selectedArtifactId ? 'active' : ''}`}
-                  onClick={() => selectArtifact(artifact.id)}
-                >
-                  {artifact.name}
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section className="sb-sec">
-            <div className="sb-row">
-              <div className="sb-label">Versions</div>
-              <button type="button" className="tiny-btn" onClick={handleCreateVersion} disabled={!selectedArtifact}>
-                + add
-              </button>
-            </div>
-            <div className="stack-list">
-              {versions.map((version: MapVersion) => (
-                <button
-                  key={version.id}
-                  type="button"
-                  className={`stack-btn ${version.id === selectedVersionId ? 'active' : ''}`}
-                  onClick={() => selectVersion(version.id)}
-                >
-                  {version.name}
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section className="sb-sec">
-            <div className="sb-label">Node Types</div>
+            <div className="sb-subhead">Node Types</div>
             {NODE_TYPE_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
@@ -719,10 +600,8 @@ export default function App() {
                 </span>
               </button>
             ))}
-          </section>
 
-          <section className="sb-sec">
-            <div className="sb-label">Connection Type</div>
+            <div className="sb-subhead">Connection Type</div>
             <div className="ct-grid">
               {EDGE_OPTIONS.map((opt) => (
                 <button
@@ -738,19 +617,155 @@ export default function App() {
             </div>
           </section>
 
-          <section className="sb-sec">
-            <div className="sb-label">Validation</div>
-            <div className="val-list">
-              {validation.length === 0 ? (
-                <div className="val-row ok">Canvas ready</div>
-              ) : (
-                validation.map((issue) => (
-                  <div key={`${issue.code}-${issue.targetId || 'global'}`} className={`val-row ${issue.severity}`}>
-                    {issue.code}: {issue.message}
+          <section className="sb-sec collapsible">
+            <button
+              type="button"
+              className="collapse-head"
+              onClick={() => setStructureOpen((open) => !open)}
+              aria-expanded={structureOpen}
+            >
+              <span className="sb-label">Structure</span>
+              <span className="collapse-indicator">{structureOpen ? '−' : '+'}</span>
+            </button>
+            {structureOpen && (
+              <>
+                <div className="sb-row">
+                  <div className="sb-subhead">Projects</div>
+                  <button type="button" className="tiny-btn" onClick={handleCreateProject}>
+                    + add
+                  </button>
+                </div>
+                <div className="stack-list">
+                  {projects.map((project) => (
+                    <button
+                      key={project.id}
+                      type="button"
+                      className={`stack-btn ${project.id === selectedProjectId ? 'active' : ''}`}
+                      onClick={() => selectProject(project.id)}
+                    >
+                      {project.name}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="tiny-btn danger"
+                  onClick={() => selectedProjectId && deleteProject(selectedProjectId)}
+                  disabled={!selectedProjectId || projects.length <= 1}
+                >
+                  Delete current
+                </button>
+
+                <div className="sb-row">
+                  <div className="sb-subhead">Artifacts</div>
+                  <button type="button" className="tiny-btn" onClick={handleCreateArtifact} disabled={!selectedProject}>
+                    + add
+                  </button>
+                </div>
+                <div className="stack-list">
+                  {projectArtifacts.map((artifact: MapArtifact) => (
+                    <button
+                      key={artifact.id}
+                      type="button"
+                      className={`stack-btn ${artifact.id === selectedArtifactId ? 'active' : ''}`}
+                      onClick={() => selectArtifact(artifact.id)}
+                    >
+                      {artifact.name}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="sb-row">
+                  <div className="sb-subhead">Versions</div>
+                  <button type="button" className="tiny-btn" onClick={handleCreateVersion} disabled={!selectedArtifact}>
+                    + add
+                  </button>
+                </div>
+                <div className="stack-list">
+                  {versions.map((version: MapVersion) => (
+                    <button
+                      key={version.id}
+                      type="button"
+                      className={`stack-btn ${version.id === selectedVersionId ? 'active' : ''}`}
+                      onClick={() => selectVersion(version.id)}
+                    >
+                      {version.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+
+          <section className="sb-sec collapsible">
+            <button
+              type="button"
+              className="collapse-head"
+              onClick={() => setPreviewOpen((open) => !open)}
+              aria-expanded={previewOpen}
+            >
+              <span className="sb-label">Preview Features</span>
+              <span className="collapse-indicator">{previewOpen ? '−' : '+'}</span>
+            </button>
+            {!previewOpen && <div className="collapsed-note">Collapsed by default to keep build tools focused.</div>}
+            {previewOpen && (
+              <section className={`ai-panel ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-section' : ''}`}>
+                <div className="ai-panel-header">
+                  <div className="ai-badge">
+                    <span className="ai-badge-dot" />
+                    AI Assist
                   </div>
-                ))
-              )}
-            </div>
+                  {!FEATURE_AVAILABILITY.aiAssist && <span className="preview-pill">Preview</span>}
+                </div>
+                <div className="ai-chips">
+                  {AI_CHIPS.map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      className={`ai-chip ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
+                      onClick={(event) => {
+                        if (!FEATURE_AVAILABILITY.aiAssist) {
+                          handlePreviewClick(event, 'AI Assist')
+                          return
+                        }
+                        setAiPrompt(`Draft a ${chip.toLowerCase()} workflow`)
+                      }}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+                <div className="ai-prompt-wrap">
+                  <textarea
+                    className={`ai-prompt ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
+                    value={aiPrompt}
+                    onChange={(event) => setAiPrompt(event.target.value)}
+                    readOnly={!FEATURE_AVAILABILITY.aiAssist}
+                    placeholder={
+                      FEATURE_AVAILABILITY.aiAssist
+                        ? 'Describe a process to map'
+                        : 'AI Assist preview - generation will be enabled in a later phase'
+                    }
+                  />
+                  <button
+                    type="button"
+                    className={`ai-send ${!FEATURE_AVAILABILITY.aiAssist ? 'preview-feature' : ''}`}
+                    title="Generate flow"
+                    disabled={!FEATURE_AVAILABILITY.aiAssist}
+                    onClick={(event) => {
+                      if (!FEATURE_AVAILABILITY.aiAssist) handlePreviewClick(event, 'AI Assist')
+                    }}
+                  >
+                    →
+                  </button>
+                </div>
+                <div className="ai-status">
+                  {FEATURE_AVAILABILITY.aiAssist
+                    ? 'Local fallback enabled.'
+                    : 'Preview only - AI generation is not wired yet.'}
+                </div>
+              </section>
+            )}
           </section>
         </aside>
 
@@ -787,6 +802,14 @@ export default function App() {
             onDragOver={handleCanvasDragOver}
             onDrop={handleCanvasDrop}
           >
+            {selectedTab === 'flow' && (
+              <div className="flow-empty-hint">
+                <strong>How to build</strong>
+                <span>1) Add nodes from Build panel (click or drag/drop).</span>
+                <span>2) Drag from one handle to another to connect.</span>
+                <span>3) Select any node/edge to edit in Inspector.</span>
+              </div>
+            )}
             {selectedTab === 'flow' ? (
               selectedVersion ? (
                 <ReactFlow
@@ -880,29 +903,12 @@ export default function App() {
 
         <aside className="inspector">
           <h2>Inspector</h2>
-
-          {selectedVersion ? (
-            <div className="field-group">
-              <label htmlFor="reviewState">Review State</label>
-              <select
-                id="reviewState"
-                value={selectedVersion.reviewState}
-                onChange={(event) =>
-                  setVersionReviewState(selectedVersion.id, event.target.value as ReviewState)
-                }
-              >
-                {reviewOptions().map((state) => (
-                  <option key={state} value={state}>
-                    {state}
-                  </option>
-                ))}
-              </select>
+          {!selectedVersion ? (
+            <div className="inspector-empty">
+              <p className="muted">No version selected.</p>
+              <p className="muted">Choose or create a version to edit nodes and edges.</p>
             </div>
-          ) : (
-            <p className="muted">No version selected.</p>
-          )}
-
-          {selectedNode ? (
+          ) : selectedNode ? (
             <>
               <p className="muted">Selected node: {selectedNode.id}</p>
               <div className="field-group">
@@ -927,6 +933,35 @@ export default function App() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="field-group">
+                <label htmlFor="reviewState">Review State</label>
+                <select
+                  id="reviewState"
+                  value={selectedVersion.reviewState}
+                  onChange={(event) =>
+                    setVersionReviewState(selectedVersion.id, event.target.value as ReviewState)
+                  }
+                >
+                  {reviewOptions().map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="inspector-actions">
+                <button
+                  type="button"
+                  className="btn danger full"
+                  onClick={handleDeleteSelection}
+                  disabled={!selectedNodeId && !selectedEdgeId}
+                >
+                  Delete selected
+                </button>
+                <button type="button" className="btn full" onClick={undoCurrentVersion} disabled={!canUndo}>
+                  Undo
+                </button>
               </div>
             </>
           ) : selectedEdge ? (
@@ -958,24 +993,26 @@ export default function App() {
                   onChange={(event) => updateEdgeLabel(selectedEdge.id, event.target.value)}
                 />
               </div>
+              <div className="inspector-actions">
+                <button
+                  type="button"
+                  className="btn danger full"
+                  onClick={handleDeleteSelection}
+                  disabled={!selectedNodeId && !selectedEdgeId}
+                >
+                  Delete selected
+                </button>
+                <button type="button" className="btn full" onClick={undoCurrentVersion} disabled={!canUndo}>
+                  Undo
+                </button>
+              </div>
             </>
           ) : (
-            <p className="muted">Select a node or connection to edit properties.</p>
+            <div className="inspector-empty">
+              <p className="muted">Contextual inspector</p>
+              <p className="muted">Select a node or connection on canvas to edit properties.</p>
+            </div>
           )}
-
-          <div className="inspector-actions">
-            <button
-              type="button"
-              className="btn danger full"
-              onClick={handleDeleteSelection}
-              disabled={!selectedNodeId && !selectedEdgeId}
-            >
-              Delete selected
-            </button>
-            <button type="button" className="btn full" onClick={undoCurrentVersion} disabled={!canUndo}>
-              Undo
-            </button>
-          </div>
         </aside>
       </main>
 
