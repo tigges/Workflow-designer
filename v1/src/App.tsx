@@ -358,7 +358,6 @@ const UI_STORAGE_KEYS = {
   sidebarVisible: 'flowcraft.ui.sidebarVisible',
   inspectorVisible: 'flowcraft.ui.inspectorVisible',
   externalAssistProvider: 'flowcraft.ui.externalAssistProvider',
-  geminiApiKey: 'flowcraft.ui.geminiApiKey',
   geminiModel: 'flowcraft.ui.geminiModel',
   geminiAssistMode: 'flowcraft.ui.geminiAssistMode',
 } as const
@@ -381,9 +380,10 @@ function readStoredExternalAssistProvider(): ExternalAssistProvider {
   return raw === 'gemini' || raw === 'copilot' ? raw : 'none'
 }
 
-function readStoredString(key: string, fallback = ''): string {
-  if (typeof window === 'undefined') return fallback
-  return window.localStorage.getItem(key) ?? fallback
+function readStoredGeminiModel(): string {
+  if (typeof window === 'undefined') return 'gemini-2.5-flash'
+  const raw = window.localStorage.getItem(UI_STORAGE_KEYS.geminiModel)
+  return raw?.trim() || 'gemini-2.5-flash'
 }
 
 function readStoredGeminiAssistMode(): GeminiAssistMode {
@@ -619,91 +619,37 @@ function guessGeminiAssistMode(text: string): GeminiAssistMode {
   return 'detail_steps'
 }
 
-  async function callGeminiText(params: {
-    apiKey: string
-    model: string
-    mode: GeminiAssistMode
-    source: string
-  }): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
-    const { apiKey, model, mode, source } = params
-    const prompt = source.trim()
-    if (!prompt) {
-      return { ok: false, error: 'No text provided for Gemini.' }
-    }
+async function callGeminiViaProxy(params: {
+  model: string
+  mode: GeminiAssistMode
+  source: string
+}): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  const response = await fetch('/api/gemini/assist', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(params),
+  })
 
-    let instruction = ''
-    if (mode === 'toc_seed') {
-      instruction = [
-        'Extract top-level clusters from this input.',
-        'Return ONLY lines in this exact format:',
-        'Cluster: <cluster name>',
-        'No bullets, numbering, markdown, or commentary.',
-      ].join('\n')
-    } else if (mode === 'ocr_cleanup') {
-      instruction = [
-        'Clean OCR noise while preserving original meaning.',
-        'Return plain text only.',
-        'Fix line wraps and hyphenation artifacts.',
-      ].join('\n')
-    } else {
-      instruction = [
-        'Convert the input into concise process-step lines for map import.',
-        'Return plain text lines only.',
-        'Prefer: Start:, Decision:, and End: when appropriate.',
-      ].join('\n')
-    }
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: instruction }],
-          },
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: prompt }],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            topP: 0.9,
-            maxOutputTokens: 2048,
-          },
-        }),
-      },
-    )
-
-    if (!response.ok) {
-      const detail = await response.text()
-      return {
-        ok: false,
-        error: `Gemini request failed (${response.status}). ${detail.slice(0, 220)}`,
-      }
-    }
-
-    const payload = (await response.json()) as {
-      candidates?: Array<{
-        content?: {
-          parts?: Array<{ text?: string }>
-        }
-      }>
-    }
-    const text =
-      payload.candidates
-        ?.flatMap((candidate) => candidate.content?.parts ?? [])
-        .map((part) => part.text ?? '')
-        .join('\n')
-        .trim() ?? ''
-
-    if (!text) {
-      return { ok: false, error: 'Gemini returned empty content.' }
-    }
-    return { ok: true, text }
+  const payload = (await response.json().catch(() => ({}))) as {
+    text?: string
+    error?: string
   }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: payload.error || `Gemini proxy failed (${response.status}).`,
+    }
+  }
+
+  const text = (payload.text ?? '').trim()
+  if (!text) {
+    return { ok: false, error: 'Gemini proxy returned empty content.' }
+  }
+  return { ok: true, text }
+}
 
 function normalizeDocMapText(raw: string): string {
   return raw.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
@@ -906,10 +852,7 @@ export default function App() {
   const [externalAssistProvider, setExternalAssistProvider] = useState<ExternalAssistProvider>(
     () => readStoredExternalAssistProvider(),
   )
-  const [geminiApiKey, setGeminiApiKey] = useState(() => readStoredString(UI_STORAGE_KEYS.geminiApiKey))
-  const [geminiModel, setGeminiModel] = useState(
-    () => readStoredString(UI_STORAGE_KEYS.geminiModel, 'gemini-2.5-flash'),
-  )
+  const [geminiModel, setGeminiModel] = useState(() => readStoredGeminiModel())
   const [geminiAssistMode, setGeminiAssistMode] = useState<GeminiAssistMode>(() =>
     readStoredGeminiAssistMode(),
   )
@@ -1036,11 +979,6 @@ export default function App() {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(UI_STORAGE_KEYS.externalAssistProvider, externalAssistProvider)
   }, [externalAssistProvider])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(UI_STORAGE_KEYS.geminiApiKey, geminiApiKey)
-  }, [geminiApiKey])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -1789,12 +1727,7 @@ export default function App() {
       return
     }
 
-    const apiKey = geminiApiKey.trim()
     const model = geminiModel.trim()
-    if (!apiKey) {
-      setHeaderNotice('Gemini API key missing. Add it in AI Assist first.')
-      return
-    }
     if (!model) {
       setHeaderNotice('Gemini model missing. Add a model like "gemini-2.5-flash".')
       return
@@ -1805,8 +1738,7 @@ export default function App() {
       const normalized = normalizeOcrText(aiPrompt)
       const source = normalized || aiPrompt
       const selectedMode = geminiAssistMode === 'detail_steps' ? guessGeminiAssistMode(source) : geminiAssistMode
-      const gemini = await callGeminiText({
-        apiKey,
+      const gemini = await callGeminiViaProxy({
         model,
         mode: selectedMode,
         source,
@@ -2248,17 +2180,6 @@ export default function App() {
                     ))}
                   </select>
                   <input
-                    type="password"
-                    className="ai-provider-input"
-                    value={geminiApiKey}
-                    onChange={(event) => setGeminiApiKey(event.target.value)}
-                    placeholder="Gemini API key"
-                    autoComplete="off"
-                    spellCheck={false}
-                    disabled={!FEATURE_AVAILABILITY.aiAssist || externalAssistBusy}
-                    title="Stored in browser local storage"
-                  />
-                  <input
                     type="text"
                     className="ai-provider-input ai-provider-model"
                     value={geminiModel}
@@ -2267,7 +2188,7 @@ export default function App() {
                     autoComplete="off"
                     spellCheck={false}
                     disabled={!FEATURE_AVAILABILITY.aiAssist || externalAssistBusy}
-                    title="Example: gemini-2.5-flash"
+                    title="Model sent through local server proxy"
                   />
                 </>
               )}
