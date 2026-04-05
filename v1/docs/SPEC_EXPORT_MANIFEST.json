@@ -1,0 +1,42 @@
+{
+  "bundleName": "import-wizard-spec-export",
+  "version": "2026-04-05",
+  "bookmarkBranch": "bookmark/IMPORT-WIZARD",
+  "baseReference": "cursor/workflow-designer-mvp-a435",
+  "specs": [
+    {
+      "id": "full-app",
+      "title": "Full App Spec (As-Is)",
+      "path": "docs/APP_SPEC_OVERVIEW.md",
+      "description": "End-to-end product, architecture, and module-level behavior."
+    },
+    {
+      "id": "import-intelligence-wizard",
+      "title": "Import Intelligence + Wizard Spec",
+      "path": "docs/IMPORT_INTELLIGENCE_WIZARD_SPEC.md",
+      "description": "Import-stage UX, parser/AI ingestion paths, and quality controls."
+    },
+    {
+      "id": "layout-intelligence",
+      "title": "Layout Intelligence Spec",
+      "path": "docs/LAYOUT_INTELLIGENCE_SPEC.md",
+      "description": "Rule-driven layout and edge-routing behavior with non-overlap guarantees."
+    },
+    {
+      "id": "test-import-content-templates",
+      "title": "Test Import Content & Templates Spec",
+      "path": "docs/TEST_IMPORT_CONTENT_TEMPLATES_SPEC.md",
+      "description": "Quick templates, grouped test imports, and fixture content definitions."
+    },
+    {
+      "id": "import-map",
+      "title": "Import Map Spec",
+      "path": "docs/IMPORT_MAP_SPEC.md",
+      "description": "Import-map visualization, clusters, phases, and document-map review panels."
+    }
+  ],
+  "exportNotes": [
+    "All specs are Markdown with Mermaid overview diagrams for portability.",
+    "The manifest can be used by tooling to package docs/*.md and this JSON together."
+  ]
+}
