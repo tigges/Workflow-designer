@@ -226,7 +226,7 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 30;
+  z-index: 80;
   min-width: 220px;
   border: 1px solid var(--border);
   border-radius: 9px;
@@ -392,6 +392,7 @@
   min-width: 280px;
   max-height: 320px;
   overflow: auto;
+  z-index: 90;
 }
 
 .test-import-group {
