@@ -387,6 +387,16 @@ const IMPORT_STAGE_STEPS: Array<{
   },
 ]
 
+const IMPORT_LAYOUT_RULES_SUMMARY = [
+  'Start is green circular node, exits from right handle.',
+  'End is red circular node, enters from left handle.',
+  'Sequence steps auto-stack left-to-right when on same row.',
+  'Connectors prefer bottom->top for vertical progression.',
+  'Decision nodes enforce explicit Yes/No exits.',
+  'Facts and policies are framed and offset from process lane.',
+  'Auto layout avoids node overlap and reduces connector crossing.',
+].join(' ')
+
 const UI_STORAGE_KEYS = {
   structureOpen: 'flowcraft.ui.structureOpen',
   previewOpen: 'flowcraft.ui.previewOpen',
@@ -773,11 +783,14 @@ function toRFNode(node: FlowNode): Node<RFNodeData> {
 
 function toRFEdge(edge: FlowEdge): Edge {
   const stroke = edgeStroke(edge.type)
+  const defaultHandles = inferDefaultEdgeHandles(edge)
   return {
     id: edge.id,
     source: edge.from,
     target: edge.to,
     label: edge.label,
+    sourceHandle: edge.sourceHandle ?? defaultHandles.sourceHandle,
+    targetHandle: edge.targetHandle ?? defaultHandles.targetHandle,
     animated: edge.type === 'parallel',
     className: `flow-edge edge-${edge.type}`,
     markerEnd: {
@@ -801,6 +814,14 @@ function toRFEdge(edge: FlowEdge): Edge {
       fillOpacity: 0.9,
     },
   }
+}
+
+function inferDefaultEdgeHandles(edge: FlowEdge): {
+  sourceHandle: 'top' | 'right' | 'bottom' | 'left'
+  targetHandle: 'top' | 'right' | 'bottom' | 'left'
+} {
+  if (edge.type === 'fallback') return { sourceHandle: 'right', targetHandle: 'left' }
+  return { sourceHandle: 'bottom', targetHandle: 'top' }
 }
 
 function EdgeTypePreview({ type }: { type: EdgeType }) {
@@ -1255,6 +1276,20 @@ export default function App() {
     }
     if (!conn.source || !conn.target) return
     const edge = buildDefaultEdge(conn.source, conn.target)
+    edge.sourceHandle =
+      conn.sourceHandle === 'top' ||
+      conn.sourceHandle === 'right' ||
+      conn.sourceHandle === 'bottom' ||
+      conn.sourceHandle === 'left'
+        ? conn.sourceHandle
+        : undefined
+    edge.targetHandle =
+      conn.targetHandle === 'top' ||
+      conn.targetHandle === 'right' ||
+      conn.targetHandle === 'bottom' ||
+      conn.targetHandle === 'left'
+        ? conn.targetHandle
+        : undefined
     const sourceNode = currentModel?.nodes.find((node) => node.id === conn.source)
     const targetNode = currentModel?.nodes.find((node) => node.id === conn.target)
     edge.type = edgeMode === 'auto'
@@ -2103,6 +2138,13 @@ export default function App() {
                     disabled={importBusy}
                   />
                 </label>
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => setHeaderNotice(`Import layout rules: ${IMPORT_LAYOUT_RULES_SUMMARY}`)}
+                >
+                  Layout rules (import)
+                </button>
               </div>
             )}
           </div>

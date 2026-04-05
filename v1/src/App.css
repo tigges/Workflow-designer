@@ -1549,6 +1549,10 @@
 
 .fnode-card.kind-terminal {
   border-radius: 999px;
+  min-width: 128px;
+  min-height: 92px;
+  aspect-ratio: 1 / 1;
+  padding: 14px 16px;
   border-color: #3fbf63;
   border-left-color: #3fbf63;
   background: #f6fcf8;
@@ -1583,6 +1587,19 @@
   border-color: #e24b4b;
   border-left-color: #e24b4b;
   background: linear-gradient(180deg, #ffffff 0%, #fff1f1 100%);
+}
+
+.fnode-card.kind-terminal .fnode-label {
+  max-width: 92px;
+}
+
+.fnode-card.kind-terminal .fnode-title {
+  -webkit-line-clamp: 2;
+  font-size: 10.5px;
+}
+
+.fnode-card.kind-terminal .fnode-note {
+  -webkit-line-clamp: 1;
 }
 
 .fnode-label {
@@ -1713,6 +1730,20 @@
 .flow-handle.connecting {
   opacity: 1;
   border-color: #2d6ef5;
+}
+
+.fnode-card.kind-terminal.term-start .flow-handle.left,
+.fnode-card.kind-terminal.term-start .flow-handle.top,
+.fnode-card.kind-terminal.term-start .flow-handle.bottom {
+  opacity: 0.07;
+  pointer-events: none;
+}
+
+.fnode-card.kind-terminal.term-end .flow-handle.right,
+.fnode-card.kind-terminal.term-end .flow-handle.top,
+.fnode-card.kind-terminal.term-end .flow-handle.bottom {
+  opacity: 0.07;
+  pointer-events: none;
 }
 
 .react-flow__edge.edge-sequential .react-flow__edge-path {

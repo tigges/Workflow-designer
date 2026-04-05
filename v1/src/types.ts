@@ -104,6 +104,8 @@ export type EdgeModel = {
   to: string
   type: EdgeType
   label?: string
+  sourceHandle?: 'top' | 'right' | 'bottom' | 'left'
+  targetHandle?: 'top' | 'right' | 'bottom' | 'left'
   evidence?: EvidenceRef[]
   confidence?: number
   origin: Origin

@@ -256,6 +256,14 @@ const IMPORT_BUDGETS: ImportBudgets = {
   maxNotesChars: 280,
 }
 
+const LAYOUT_RULE_SUMMARY = [
+  'Start terminal uses right-side output handle.',
+  'End terminal uses left-side input handle.',
+  'Sequential nodes stack horizontally until wrap row.',
+  'Decision nodes expose explicit Yes and No exits.',
+  'Fact and policy annotations are clustered away from process path.',
+]
+
 const NOISE_LINE_RE = /^(?:[-_=*#~\s]{4,}|page\s+\d+|\d+\s*\/\s*\d+|https?:\/\/\S+|www\.\S+)$/i
 const PAGE_MARKER_RE = /^--\s*\d+\s*(?:of|\/)\s*\d+\s*--$/i
 const HEADER_RE = /^(?:#{1,3}\s+.+|\d+(?:\.\d+)*\s+[A-Z].+|[A-Z][A-Z\s&/-]{8,})$/
@@ -364,6 +372,49 @@ function parseSectionsFromText(text: string, budgets: ImportBudgets): {
 
   const filtered = sections.filter((section) => section.steps.length > 0)
   return { sections: filtered.length > 0 ? filtered : [{ title: 'General', steps: [] }], warnings }
+}
+
+type AutoLayoutHandles = {
+  sourceHandle?: 'top' | 'right' | 'bottom' | 'left'
+  targetHandle?: 'top' | 'right' | 'bottom' | 'left'
+}
+
+function attachLayoutRulesMetadata(node: FlowNode, layoutGroup: string): FlowNode {
+  const existingNotes = node.metadata.notes?.trim() ?? ''
+  const layoutNote = `layout_group=${layoutGroup}`
+  const nextNotes = existingNotes ? `${existingNotes} | ${layoutNote}` : layoutNote
+  return {
+    ...node,
+    metadata: {
+      ...node.metadata,
+      notes: nextNotes,
+    },
+  }
+}
+
+function deriveEdgeHandles(edge: EdgeModel, nodeById: Map<string, FlowNode>): AutoLayoutHandles {
+  const sourceNode = nodeById.get(edge.from)
+  const targetNode = nodeById.get(edge.to)
+  if (!sourceNode || !targetNode) return {}
+
+  if (sourceNode.type === 'terminal' && /^start\b/i.test(sourceNode.label.trim())) {
+    return { sourceHandle: 'right', targetHandle: 'left' }
+  }
+  if (targetNode.type === 'terminal' && /^end\b/i.test(targetNode.label.trim())) {
+    return { sourceHandle: 'right', targetHandle: 'left' }
+  }
+
+  const sameRow = Math.abs(sourceNode.position.y - targetNode.position.y) <= 24
+  if (sameRow) {
+    return {
+      sourceHandle: sourceNode.position.x <= targetNode.position.x ? 'right' : 'left',
+      targetHandle: sourceNode.position.x <= targetNode.position.x ? 'left' : 'right',
+    }
+  }
+  return {
+    sourceHandle: sourceNode.position.y <= targetNode.position.y ? 'bottom' : 'top',
+    targetHandle: sourceNode.position.y <= targetNode.position.y ? 'top' : 'bottom',
+  }
 }
 
 function buildModelFromSections(
@@ -502,11 +553,68 @@ function buildModelFromSections(
       from: fromNode.id,
       to: toNode.id,
       type: detectParallelLabel(fromNode.label) ? 'parallel' : inferEdgeTypeForImported(fromNode, toNode),
-      label: fromNode.type === 'decision' ? 'Yes/No' : '',
+      label: fromNode.type === 'decision' ? 'Yes' : '',
       origin,
       confidence: 0.7,
     })
   }
+
+  // Ensure decision nodes always expose explicit Yes/No exits.
+  const decisionNodes = processNodes.filter((node) => node.type === 'decision')
+  decisionNodes.forEach((decisionNode) => {
+    const outgoing = edges.filter((edge) => edge.from === decisionNode.id)
+    if (outgoing.length === 0) return
+
+    outgoing.forEach((edge) => {
+      if (/yes\s*\/\s*no/i.test(edge.label ?? '')) edge.label = 'Yes'
+    })
+
+    const yesEdge = outgoing.find((edge) => /(^|\s)yes(\s|$)/i.test(edge.label ?? '')) ?? outgoing[0]
+    yesEdge.label = 'Yes'
+    yesEdge.type = 'conditional'
+
+    let noEdge = outgoing.find((edge) => /(^|\s)no(\s|$)/i.test(edge.label ?? ''))
+    if (!noEdge) {
+      if (processNodes.length + annotationNodes.length < budgets.maxTotalNodes && edges.length < budgets.maxEdges) {
+        const fallbackNode: FlowNode = {
+          id: mkId('n'),
+          type: 'annotation',
+          label: clampText(`Policy: No branch for ${decisionNode.label.replace(/^Decision:\s*/i, '')}`, budgets.maxTitleChars),
+          actor: '',
+          status: 'live',
+          metadata: {
+            stage: 'Unassigned Policy',
+            touchpoint: 'Decision fallback',
+            notes: 'Auto-generated fallback branch to preserve decision Yes/No structure.',
+          },
+          origin,
+          confidence: normalizeConfidence((decisionNode.confidence ?? 0.66) - 0.05, 0.58),
+          position: { x: 0, y: 0 },
+        }
+        annotationNodes.push(fallbackNode)
+        noEdge = {
+          id: mkId('e'),
+          from: decisionNode.id,
+          to: fallbackNode.id,
+          type: 'fallback',
+          label: 'No',
+          origin,
+          confidence: normalizeConfidence((decisionNode.confidence ?? 0.66) - 0.05, 0.58),
+        }
+        edges.push(noEdge)
+      }
+    }
+    if (noEdge) {
+      noEdge.label = 'No'
+      if (noEdge.type === 'sequential') noEdge.type = 'conditional'
+    }
+
+    outgoing
+      .filter((edge) => edge.id !== yesEdge.id && (!noEdge || edge.id !== noEdge.id))
+      .forEach((edge) => {
+        if (/yes|no/i.test(edge.label ?? '')) edge.label = ''
+      })
+  })
 
   let nodes = [...processNodes, ...annotationNodes]
   if (nodes.length > budgets.maxTotalNodes) {
@@ -518,23 +626,88 @@ function buildModelFromSections(
   const processNodeIds = new Set(nodes.filter((node) => node.type !== 'annotation').map((node) => node.id))
   const boundedEdges = edges.filter((edge) => processNodeIds.has(edge.from) && processNodeIds.has(edge.to))
 
-  const positionedNodes = nodes.map((node, index) => {
-    const isAnnotation = node.type === 'annotation'
-    const rel = isAnnotation ? annotationNodes.findIndex((item) => item.id === node.id) : processNodes.findIndex((item) => item.id === node.id)
-    const position = isAnnotation
-      ? {
-          x: 980 + (Math.max(rel, 0) % 2) * 220,
-          y: 120 + Math.floor(Math.max(rel, 0) / 2) * 118,
-        }
-      : {
-          x: 140 + (Math.max(rel, index) % 4) * 210,
-          y: 120 + Math.floor(Math.max(rel, index) / 4) * 140,
-        }
-    return { ...node, position }
+  const processById = new Map(processNodes.map((node) => [node.id, node]))
+  const annotationById = new Map(annotationNodes.map((node) => [node.id, node]))
+  const maxProcessColumns = Math.max(3, Math.min(6, processNodes.length))
+  const processX = 140
+  const processY = 120
+  const processColGap = 230
+  const processRowGap = 190
+  const processPositions = new Map<string, XY>()
+  processNodes.forEach((node, index) => {
+    const row = Math.floor(index / maxProcessColumns)
+    const col = index % maxProcessColumns
+    processPositions.set(node.id, {
+      x: processX + col * processColGap,
+      y: processY + row * processRowGap,
+    })
+  })
+
+  const processMaxX =
+    processNodes.length > 0
+      ? Math.max(...[...processPositions.values()].map((position) => position.x))
+      : processX
+  const annotationClusterX = processMaxX + 320
+  const annotationColGap = 230
+  const annotationRowGap = 126
+
+  const factNodes = annotationNodes.filter((node) => /^fact\s*:/i.test(node.label))
+  const policyNodes = annotationNodes.filter((node) => /^policy\s*:/i.test(node.label))
+  const unclassifiedNodes = annotationNodes.filter(
+    (node) => !factNodes.some((item) => item.id === node.id) && !policyNodes.some((item) => item.id === node.id),
+  )
+
+  const annotationPositions = new Map<string, XY>()
+  const placeAnnotationGroup = (group: FlowNode[], startY: number) => {
+    group.forEach((node, index) => {
+      const col = index % 2
+      const row = Math.floor(index / 2)
+      annotationPositions.set(node.id, {
+        x: annotationClusterX + col * annotationColGap,
+        y: startY + row * annotationRowGap,
+      })
+    })
+  }
+
+  const factStartY = processY
+  const policyStartY = factStartY + Math.max(1, Math.ceil(factNodes.length / 2)) * annotationRowGap + 90
+  const unclassifiedStartY =
+    policyStartY + Math.max(1, Math.ceil(policyNodes.length / 2)) * annotationRowGap + 90
+  placeAnnotationGroup(factNodes, factStartY)
+  placeAnnotationGroup(policyNodes, policyStartY)
+  placeAnnotationGroup(unclassifiedNodes, unclassifiedStartY)
+
+  const positionedNodes = nodes.map((node) => {
+    if (processById.has(node.id)) {
+      const withPosition = { ...node, position: processPositions.get(node.id) ?? { x: processX, y: processY } }
+      return attachLayoutRulesMetadata(withPosition, 'process')
+    }
+    if (annotationById.has(node.id)) {
+      const withPosition = {
+        ...node,
+        position: annotationPositions.get(node.id) ?? { x: annotationClusterX, y: unclassifiedStartY },
+      }
+      const tag = /^fact\s*:/i.test(node.label)
+        ? 'fact'
+        : /^policy\s*:/i.test(node.label)
+          ? 'policy'
+          : 'unclassified'
+      return attachLayoutRulesMetadata(withPosition, tag)
+    }
+    return node
+  })
+
+  const nodeByIdForRouting = new Map(positionedNodes.map((node) => [node.id, node]))
+  const routedEdges = boundedEdges.map((edge) => {
+    const handles = deriveEdgeHandles(edge, nodeByIdForRouting)
+    return {
+      ...edge,
+      ...handles,
+    }
   })
 
   model.nodes = positionedNodes
-  model.edges = boundedEdges
+  model.edges = routedEdges
   positionedNodes.forEach((node) => {
     model.projections.flow.nodePositions[node.id] = node.position
     model.projections.map.nodePositions[node.id] = {
@@ -549,6 +722,11 @@ function buildModelFromSections(
       message: `Import normalization notes: ${warnings.join(' ')}`,
     })
   }
+  model.validation.push({
+    code: 'MISSING_EVIDENCE_AI_ELEMENT',
+    severity: 'info',
+    message: `Layout rules: ${LAYOUT_RULE_SUMMARY.join(' ')}`,
+  })
   validate(model)
   return model
 }
@@ -1871,5 +2049,7 @@ export function buildDefaultEdge(from: string, to: string): FlowEdge {
     type: 'sequential',
     label: '',
     origin: 'manual',
+    sourceHandle: 'right',
+    targetHandle: 'left',
   }
 }
