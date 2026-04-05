@@ -755,10 +755,10 @@ function FlowNodeView({ data }: NodeProps<Node<RFNodeData>>) {
       <div className="fnode-meta">
         <span className={`actor-pill actor-${actorText(data.actor)}`}>{actorLabel(data.actor)}</span>
       </div>
-      <Handle type="target" position={Position.Top} className="flow-handle top" />
-      <Handle type="source" position={Position.Bottom} className="flow-handle bottom" />
-      <Handle type="target" position={Position.Left} className="flow-handle left" />
-      <Handle type="source" position={Position.Right} className="flow-handle right" />
+      <Handle id="top" type="target" position={Position.Top} className="flow-handle top" />
+      <Handle id="bottom" type="source" position={Position.Bottom} className="flow-handle bottom" />
+      <Handle id="left" type="target" position={Position.Left} className="flow-handle left" />
+      <Handle id="right" type="source" position={Position.Right} className="flow-handle right" />
     </div>
   )
 }
