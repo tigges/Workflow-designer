@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FlowMap Lite Wireframe Draft</title>
+    <link rel="stylesheet" href="./wireframe.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">FlowMap Lite - HTML Wireframe</div>
+      <nav class="tabs" aria-label="Wireframe views">
+        <button class="tab active" data-view="home">Home</button>
+        <button class="tab" data-view="new-map">New Map</button>
+        <button class="tab" data-view="import">Import Wizard</button>
+        <button class="tab" data-view="editor-process">Editor (Process)</button>
+        <button class="tab" data-view="editor-journey">Editor (Journey)</button>
+      </nav>
+    </header>
+
+    <main class="canvas">
+      <section class="view active" id="view-home">
+        <h1>Home / Dashboard</h1>
+        <div class="panel">
+          <div class="row cards">
+            <article class="card">
+              <h3>Process Map</h3>
+              <p>Steps, decisions, directed connectors.</p>
+              <button id="home-start-process">Start</button>
+            </article>
+            <article class="card">
+              <h3>User Journey Flow</h3>
+              <p>Persona, stages, touchpoints, pain points.</p>
+              <button id="home-start-journey">Start</button>
+            </article>
+            <article class="card">
+              <h3>Import Document</h3>
+              <p>Paste text or upload file to generate a draft map.</p>
+              <button id="home-start-import">Import</button>
+            </article>
+          </div>
+          <div class="row recent">
+            <h4>Recent Projects</h4>
+            <ul>
+              <li>Checkout Funnel - Process View</li>
+              <li>Checkout Funnel - Journey View</li>
+              <li>Incident Escalation - Process View</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-new-map">
+        <h1>New Map Modal</h1>
+        <div class="panel center">
+          <div class="modal">
+            <h3>Create New Map</h3>
+            <label>Intent</label>
+            <div class="chip-row">
+              <button class="chip selected" data-intent="process">Process Map</button>
+              <button class="chip" data-intent="journey">User Journey Flow</button>
+            </div>
+
+            <label>Start Mode</label>
+            <div class="chip-row">
+              <button class="chip selected" data-mode="blank">Blank</button>
+              <button class="chip" data-mode="template">Template</button>
+              <button class="chip" data-mode="import">Import</button>
+            </div>
+
+            <label>Map Name</label>
+            <input type="text" value="New Checkout Map" />
+            <div class="actions">
+              <button class="ghost" id="new-map-cancel">Cancel</button>
+              <button id="new-map-continue">Continue</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-import">
+        <h1>Import Wizard (Source -> Mapping -> Preview)</h1>
+        <div class="stepbar">
+          <button class="step active" data-step="1">1. Source</button>
+          <button class="step" data-step="2">2. Mapping</button>
+          <button class="step" data-step="3">3. Preview</button>
+        </div>
+
+        <div class="panel step-panel active" id="step-1">
+          <div class="dropzone">Drop file here (.txt .md .docx .pdf .csv)</div>
+          <textarea placeholder="Or paste process/journey notes here"></textarea>
+          <div class="actions right">
+            <button id="import-1-next">Next</button>
+          </div>
+        </div>
+
+        <div class="panel step-panel" id="step-2">
+          <div class="row two">
+            <div class="box">
+              <h4>Extracted Structure</h4>
+              <ol>
+                <li>User opens app</li>
+                <li>Clicks start trial</li>
+                <li>Completes form</li>
+                <li>Verifies email</li>
+              </ol>
+            </div>
+            <div class="box">
+              <h4>Mapping Controls</h4>
+              <p>Detected intent: <strong>Process Map (92%)</strong></p>
+              <p>Warnings: 2 ambiguous transitions.</p>
+              <label>Intent Override</label>
+              <select>
+                <option>Process Map</option>
+                <option>User Journey Flow</option>
+              </select>
+            </div>
+          </div>
+          <div class="actions between">
+            <button class="ghost" id="import-2-back">Back</button>
+            <button id="import-2-next">Next</button>
+          </div>
+        </div>
+
+        <div class="panel step-panel" id="step-3">
+          <div class="box">
+            <h4>Preview Summary</h4>
+            <p>18 nodes | 21 connectors | 2 warnings</p>
+            <pre>[Start] -> [Visit] -> [Sign Up] -> &lt;Verified?&gt; -> [Dashboard]</pre>
+          </div>
+          <div class="actions between">
+            <button class="ghost" id="import-3-back">Back</button>
+            <button id="import-generate">Generate Editable Map</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-editor-process">
+        <h1>Editor - Process Map</h1>
+        <div class="editor">
+          <aside class="left">
+            <h4>Library</h4>
+            <ul>
+              <li>Start/End</li>
+              <li>Step</li>
+              <li>Decision</li>
+              <li>Connector</li>
+              <li>Label</li>
+            </ul>
+          </aside>
+          <div class="middle">
+            <div class="toolbar">
+              <button id="process-open-import">Import</button>
+              <button id="process-open-optimize">Optimize</button>
+              <button id="process-open-export">Export</button>
+              <button id="process-back-home" class="ghost">Back Home</button>
+            </div>
+            <div class="board">
+              <pre>[Start] --> [Open App] --> [Choose Plan]
+                           \--> &lt;Payment OK?&gt;
+                                 |yes -> [Success]
+                                 |no  -> [Retry]</pre>
+            </div>
+          </div>
+          <aside class="right">
+            <h4>Properties</h4>
+            <label>Label</label>
+            <input type="text" value="Choose Plan" />
+            <label>Type</label>
+            <select>
+              <option>Step</option>
+              <option>Decision</option>
+            </select>
+            <label>Pinned</label>
+            <input type="checkbox" />
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-editor-journey">
+        <h1>Editor - User Journey Flow</h1>
+        <div class="editor">
+          <aside class="left">
+            <h4>Journey Blocks</h4>
+            <ul>
+              <li>Stage</li>
+              <li>Action</li>
+              <li>Touchpoint</li>
+              <li>Pain Point</li>
+              <li>Opportunity</li>
+            </ul>
+          </aside>
+          <div class="middle">
+            <div class="toolbar">
+              <button id="journey-open-import">Import</button>
+              <button id="journey-open-optimize">Optimize</button>
+              <button id="journey-open-export">Export</button>
+              <button id="journey-back-home" class="ghost">Back Home</button>
+            </div>
+            <div class="board">
+              <table>
+                <tr>
+                  <th>Awareness</th>
+                  <th>Consideration</th>
+                  <th>Signup</th>
+                  <th>Activation</th>
+                </tr>
+                <tr>
+                  <td>See ad</td>
+                  <td>Compare plans</td>
+                  <td>Fill form</td>
+                  <td>Use app</td>
+                </tr>
+                <tr>
+                  <td>Pain: vague CTA</td>
+                  <td>Pain: too many choices</td>
+                  <td>Pain: OTP delay</td>
+                  <td>Opportunity: guided setup</td>
+                </tr>
+              </table>
+            </div>
+          </div>
+          <aside class="right">
+            <h4>Properties</h4>
+            <label>Persona</label>
+            <input type="text" value="New Buyer" />
+            <label>Severity</label>
+            <select>
+              <option>High</option>
+              <option>Medium</option>
+              <option>Low</option>
+            </select>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-optimizer">
+        <h1>Layout Optimizer</h1>
+        <div class="panel center">
+          <div class="modal">
+            <h3>Intelligent Layout Optimizer</h3>
+            <label>Scope</label>
+            <div class="chip-row">
+              <button class="chip selected">Entire Map</button>
+              <button class="chip">Selection Only</button>
+            </div>
+            <label>Preserve</label>
+            <div class="chip-row">
+              <button class="chip selected">Pinned Nodes</button>
+              <button class="chip selected">Stage Columns</button>
+            </div>
+            <div class="actions">
+              <button class="ghost" id="optimizer-cancel">Cancel</button>
+              <button id="optimizer-apply">Apply</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-export">
+        <h1>Export</h1>
+        <div class="panel center">
+          <div class="modal">
+            <h3>Export Map</h3>
+            <label>Format</label>
+            <select>
+              <option>PNG</option>
+              <option>PDF</option>
+            </select>
+            <label>Scope</label>
+            <select>
+              <option>Full Map</option>
+              <option>Current View</option>
+            </select>
+            <div class="actions">
+              <button class="ghost" id="export-cancel">Cancel</button>
+              <button id="export-do">Export</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="./wireframe.js"></script>
+  </body>
+</html>
