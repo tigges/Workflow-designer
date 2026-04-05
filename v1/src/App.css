@@ -383,6 +383,65 @@
   margin-right: 8px;
 }
 
+.sample-template-strip .menu-wrap .sti-pill {
+  display: inline-flex;
+  align-items: center;
+}
+
+.menu-pop-test-imports {
+  min-width: 280px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.test-import-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 6px;
+}
+
+.test-import-group + .test-import-group {
+  border-top: 1px solid #eef2f8;
+}
+
+.test-import-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #7a869a;
+}
+
+.test-import-group-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.test-import-group-options .menu-item {
+  width: auto;
+  padding: 5px 8px;
+  border: 1px solid #d7e2fb;
+  border-radius: 999px;
+  background: #f2f6ff;
+  color: #2d6ef5;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.test-import-group-options .menu-item:hover:not(:disabled) {
+  border-color: #b9ccfb;
+  background: #e9f0ff;
+}
+
+.test-import-group-options .menu-item.qa {
+  border-color: #c8d8f9;
+  background: #f5f8ff;
+  color: #355ebd;
+}
+
 .sti-pill {
   border: 1px solid #d7e2fb;
   border-radius: 999px;

@@ -251,6 +251,42 @@ type ImportBudgets = {
   maxNotesChars: number
 }
 
+type LayoutTag = 'process' | 'fact' | 'policy' | 'unclassified'
+
+type LayoutRulesConfig = {
+  summary: string[]
+  nodeFootprints: Record<FlowNodeType, { width: number; height: number }>
+  process: {
+    startX: number
+    startY: number
+    columnsMin: number
+    columnsMax: number
+    colGap: number
+    rowGap: number
+  }
+  annotation: {
+    clusterOffsetX: number
+    colGap: number
+    rowGap: number
+    groupGapY: number
+  }
+  handleRouting: {
+    sameRowTolerance: number
+  }
+  overlapGuard: {
+    padding: number
+    maxPlacementAttempts: number
+    processShiftX: number
+    processShiftY: number
+    annotationShiftX: number
+    annotationShiftY: number
+  }
+  decision: {
+    enforceYesNo: boolean
+    autoFallbackNoBranch: boolean
+  }
+}
+
 const IMPORT_BUDGETS: ImportBudgets = {
   maxInputLines: 600,
   maxProcessNodes: 72,
@@ -262,13 +298,52 @@ const IMPORT_BUDGETS: ImportBudgets = {
   maxNotesChars: 280,
 }
 
-const LAYOUT_RULE_SUMMARY = [
-  'Start terminal uses right-side output handle.',
-  'End terminal uses left-side input handle.',
-  'Sequential nodes stack horizontally until wrap row.',
-  'Decision nodes expose explicit Yes and No exits.',
-  'Fact and policy annotations are clustered away from process path.',
-]
+const DEFAULT_LAYOUT_RULES: LayoutRulesConfig = {
+  summary: [
+    'Start terminal uses right-side output handle.',
+    'End terminal uses left-side input handle.',
+    'Sequential nodes stack horizontally until wrap row.',
+    'Decision nodes expose explicit Yes and No exits.',
+    'Fact and policy annotations are clustered away from process path.',
+    'No node overlap: rectangular bounds are separated after placement.',
+  ],
+  nodeFootprints: {
+    process: { width: 164, height: 84 },
+    decision: { width: 170, height: 140 },
+    terminal: { width: 128, height: 92 },
+    data: { width: 164, height: 84 },
+    annotation: { width: 170, height: 84 },
+  },
+  process: {
+    startX: 140,
+    startY: 120,
+    columnsMin: 3,
+    columnsMax: 6,
+    colGap: 230,
+    rowGap: 190,
+  },
+  annotation: {
+    clusterOffsetX: 320,
+    colGap: 230,
+    rowGap: 126,
+    groupGapY: 90,
+  },
+  handleRouting: {
+    sameRowTolerance: 24,
+  },
+  overlapGuard: {
+    padding: 16,
+    maxPlacementAttempts: 14,
+    processShiftX: 84,
+    processShiftY: 70,
+    annotationShiftX: 116,
+    annotationShiftY: 66,
+  },
+  decision: {
+    enforceYesNo: true,
+    autoFallbackNoBranch: true,
+  },
+}
 
 const NOISE_LINE_RE = /^(?:[-_=*#~\s]{4,}|page\s+\d+|\d+\s*\/\s*\d+|https?:\/\/\S+|www\.\S+)$/i
 const PAGE_MARKER_RE = /^--\s*\d+\s*(?:of|\/)\s*\d+\s*--$/i
@@ -610,7 +685,7 @@ type AutoLayoutHandles = {
   targetHandle?: 'top' | 'right' | 'bottom' | 'left'
 }
 
-function attachLayoutRulesMetadata(node: FlowNode, layoutGroup: string): FlowNode {
+function attachLayoutRulesMetadata(node: FlowNode, layoutGroup: LayoutTag): FlowNode {
   const existingNotes = node.metadata.notes?.trim() ?? ''
   const layoutNote = `layout_group=${layoutGroup}`
   const nextNotes = existingNotes ? `${existingNotes} | ${layoutNote}` : layoutNote
@@ -618,12 +693,65 @@ function attachLayoutRulesMetadata(node: FlowNode, layoutGroup: string): FlowNod
     ...node,
     metadata: {
       ...node.metadata,
+      layoutGroup,
       notes: nextNotes,
     },
   }
 }
 
-function deriveEdgeHandles(edge: EdgeModel, nodeById: Map<string, FlowNode>): AutoLayoutHandles {
+function nodeBoxesOverlap(a: FlowNode, b: FlowNode, rules: LayoutRulesConfig): boolean {
+  const aSize = rules.nodeFootprints[a.type]
+  const bSize = rules.nodeFootprints[b.type]
+  const pad = rules.overlapGuard.padding
+  const aLeft = a.position.x - pad
+  const aTop = a.position.y - pad
+  const aRight = a.position.x + aSize.width + pad
+  const aBottom = a.position.y + aSize.height + pad
+  const bLeft = b.position.x - pad
+  const bTop = b.position.y - pad
+  const bRight = b.position.x + bSize.width + pad
+  const bBottom = b.position.y + bSize.height + pad
+  return !(aRight <= bLeft || bRight <= aLeft || aBottom <= bTop || bBottom <= aTop)
+}
+
+function enforceNoOverlap(nodes: FlowNode[], rules: LayoutRulesConfig): FlowNode[] {
+  const placed: FlowNode[] = []
+  nodes.forEach((candidate, index) => {
+    const node: FlowNode = {
+      ...candidate,
+      position: { ...candidate.position },
+    }
+    let attempts = 0
+    while (
+      attempts < rules.overlapGuard.maxPlacementAttempts &&
+      placed.some((other) => nodeBoxesOverlap(node, other, rules))
+    ) {
+      if (node.type === 'annotation') {
+        const verticalDirection = attempts % 2 === 0 ? 1 : -1
+        node.position.x += rules.overlapGuard.annotationShiftX
+        node.position.y += verticalDirection * rules.overlapGuard.annotationShiftY
+      } else {
+        const verticalDirection = attempts % 2 === 0 ? 1 : -1
+        node.position.x += rules.overlapGuard.processShiftX
+        node.position.y += verticalDirection * rules.overlapGuard.processShiftY
+      }
+      attempts += 1
+    }
+    if (attempts >= rules.overlapGuard.maxPlacementAttempts) {
+      // Deterministic fallback keeps dense imports readable.
+      node.position.x += (index + 1) * 12
+      node.position.y += (index + 1) * 10
+    }
+    placed.push(node)
+  })
+  return placed
+}
+
+function deriveEdgeHandles(
+  edge: EdgeModel,
+  nodeById: Map<string, FlowNode>,
+  rules: LayoutRulesConfig,
+): AutoLayoutHandles {
   const sourceNode = nodeById.get(edge.from)
   const targetNode = nodeById.get(edge.to)
   if (!sourceNode || !targetNode) return {}
@@ -635,7 +763,7 @@ function deriveEdgeHandles(edge: EdgeModel, nodeById: Map<string, FlowNode>): Au
     return { sourceHandle: 'right', targetHandle: 'left' }
   }
 
-  const sameRow = Math.abs(sourceNode.position.y - targetNode.position.y) <= 24
+  const sameRow = Math.abs(sourceNode.position.y - targetNode.position.y) <= rules.handleRouting.sameRowTolerance
   if (sameRow) {
     return {
       sourceHandle: sourceNode.position.x <= targetNode.position.x ? 'right' : 'left',
@@ -660,6 +788,7 @@ function buildModelFromSections(
   },
 ): CanonicalModel {
   const { origin, title, confidence, budgets, warnings, clusters = [] } = options
+  const layoutRules = DEFAULT_LAYOUT_RULES
   const model = emptyModel(title)
   model.confidence = confidence
   const sectionActorProfiles = buildSectionActorProfile(sections)
@@ -793,7 +922,7 @@ function buildModelFromSections(
     })
   }
 
-  // Ensure decision nodes always expose explicit Yes/No exits.
+  // Content allocation engine: shape semantic branch logic before layout.
   const decisionNodes = processNodes.filter((node) => node.type === 'decision')
   decisionNodes.forEach((decisionNode) => {
     const outgoing = edges.filter((edge) => edge.from === decisionNode.id)
@@ -857,18 +986,30 @@ function buildModelFromSections(
     nodes = nodes.slice(0, budgets.maxTotalNodes)
   }
 
-  const processNodeIds = new Set(nodes.filter((node) => node.type !== 'annotation').map((node) => node.id))
-  const boundedEdges = edges.filter((edge) => processNodeIds.has(edge.from) && processNodeIds.has(edge.to))
+  // Keep every semantic edge whose endpoints survive node-budget bounding.
+  const boundedNodeIds = new Set(nodes.map((node) => node.id))
+  const boundedEdges = edges.filter((edge) => boundedNodeIds.has(edge.from) && boundedNodeIds.has(edge.to))
+  if (boundedEdges.length < edges.length) {
+    warnings.push(
+      `Dropped ${edges.length - boundedEdges.length} edge(s) because one endpoint exceeded node budget.`,
+    )
+  }
 
-  const processById = new Map(processNodes.map((node) => [node.id, node]))
-  const annotationById = new Map(annotationNodes.map((node) => [node.id, node]))
-  const maxProcessColumns = Math.max(3, Math.min(6, processNodes.length))
-  const processX = 140
-  const processY = 120
-  const processColGap = 230
-  const processRowGap = 190
+  // Layout engine: position and route, never rewrite semantic content.
+  const processLaneNodes = nodes.filter((node) => node.type !== 'annotation')
+  const annotationLaneNodes = nodes.filter((node) => node.type === 'annotation')
+  const processById = new Map(processLaneNodes.map((node) => [node.id, node]))
+  const annotationById = new Map(annotationLaneNodes.map((node) => [node.id, node]))
+  const maxProcessColumns = Math.max(
+    layoutRules.process.columnsMin,
+    Math.min(layoutRules.process.columnsMax, processLaneNodes.length),
+  )
+  const processX = layoutRules.process.startX
+  const processY = layoutRules.process.startY
+  const processColGap = layoutRules.process.colGap
+  const processRowGap = layoutRules.process.rowGap
   const processPositions = new Map<string, XY>()
-  processNodes.forEach((node, index) => {
+  processLaneNodes.forEach((node, index) => {
     const row = Math.floor(index / maxProcessColumns)
     const col = index % maxProcessColumns
     processPositions.set(node.id, {
@@ -878,16 +1019,16 @@ function buildModelFromSections(
   })
 
   const processMaxX =
-    processNodes.length > 0
+    processLaneNodes.length > 0
       ? Math.max(...[...processPositions.values()].map((position) => position.x))
       : processX
-  const annotationClusterX = processMaxX + 320
-  const annotationColGap = 230
-  const annotationRowGap = 126
+  const annotationClusterX = processMaxX + layoutRules.annotation.clusterOffsetX
+  const annotationColGap = layoutRules.annotation.colGap
+  const annotationRowGap = layoutRules.annotation.rowGap
 
-  const factNodes = annotationNodes.filter((node) => /^fact\s*:/i.test(node.label))
-  const policyNodes = annotationNodes.filter((node) => /^policy\s*:/i.test(node.label))
-  const unclassifiedNodes = annotationNodes.filter(
+  const factNodes = annotationLaneNodes.filter((node) => /^fact\s*:/i.test(node.label))
+  const policyNodes = annotationLaneNodes.filter((node) => /^policy\s*:/i.test(node.label))
+  const unclassifiedNodes = annotationLaneNodes.filter(
     (node) => !factNodes.some((item) => item.id === node.id) && !policyNodes.some((item) => item.id === node.id),
   )
 
@@ -904,9 +1045,14 @@ function buildModelFromSections(
   }
 
   const factStartY = processY
-  const policyStartY = factStartY + Math.max(1, Math.ceil(factNodes.length / 2)) * annotationRowGap + 90
+  const policyStartY =
+    factStartY +
+    Math.max(1, Math.ceil(factNodes.length / 2)) * annotationRowGap +
+    layoutRules.annotation.groupGapY
   const unclassifiedStartY =
-    policyStartY + Math.max(1, Math.ceil(policyNodes.length / 2)) * annotationRowGap + 90
+    policyStartY +
+    Math.max(1, Math.ceil(policyNodes.length / 2)) * annotationRowGap +
+    layoutRules.annotation.groupGapY
   placeAnnotationGroup(factNodes, factStartY)
   placeAnnotationGroup(policyNodes, policyStartY)
   placeAnnotationGroup(unclassifiedNodes, unclassifiedStartY)
@@ -921,7 +1067,7 @@ function buildModelFromSections(
         ...node,
         position: annotationPositions.get(node.id) ?? { x: annotationClusterX, y: unclassifiedStartY },
       }
-      const tag = /^fact\s*:/i.test(node.label)
+      const tag: LayoutTag = /^fact\s*:/i.test(node.label)
         ? 'fact'
         : /^policy\s*:/i.test(node.label)
           ? 'policy'
@@ -931,18 +1077,19 @@ function buildModelFromSections(
     return node
   })
 
-  const nodeByIdForRouting = new Map(positionedNodes.map((node) => [node.id, node]))
+  const nonOverlappingNodes = enforceNoOverlap(positionedNodes, layoutRules)
+  const nodeByIdForRouting = new Map(nonOverlappingNodes.map((node) => [node.id, node]))
   const routedEdges = boundedEdges.map((edge) => {
-    const handles = deriveEdgeHandles(edge, nodeByIdForRouting)
+    const handles = deriveEdgeHandles(edge, nodeByIdForRouting, layoutRules)
     return {
       ...edge,
       ...handles,
     }
   })
 
-  model.nodes = positionedNodes
+  model.nodes = nonOverlappingNodes
   model.edges = routedEdges
-  positionedNodes.forEach((node) => {
+  nonOverlappingNodes.forEach((node) => {
     model.projections.flow.nodePositions[node.id] = node.position
     model.projections.map.nodePositions[node.id] = {
       x: node.position.x * 0.9,
@@ -959,7 +1106,7 @@ function buildModelFromSections(
   model.validation.push({
     code: 'MISSING_EVIDENCE_AI_ELEMENT',
     severity: 'info',
-    message: `Layout rules: ${LAYOUT_RULE_SUMMARY.join(' ')}`,
+    message: `Layout rules: ${layoutRules.summary.join(' ')}`,
   })
   validate(model)
   return model

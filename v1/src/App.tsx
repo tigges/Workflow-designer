@@ -250,6 +250,29 @@ const IMPORT_TEST_TEMPLATES = [
   },
 ] as const
 
+const IMPORT_TEST_TEMPLATE_GROUPS = [
+  {
+    id: 'toc',
+    label: 'TOC',
+    templateIds: ['gold-toc-seed'],
+  },
+  {
+    id: 'withdrawal',
+    label: 'Withdrawal 4.2',
+    templateIds: ['wd-4-2-raw', 'wd-4-2-gold'],
+  },
+  {
+    id: 'cashback',
+    label: 'Cashback 6.3',
+    templateIds: ['cb-6-3-raw', 'cb-6-3-gold'],
+  },
+  {
+    id: 'reopening',
+    label: 'Reopening 8.1',
+    templateIds: ['ar-8-1-raw', 'ar-8-1-gold'],
+  },
+] as const
+
 const BLANK_TEMPLATE_DESCRIPTION =
   'Blank template: start from an empty map and describe your process goals, actors, and expected outcomes.'
 
@@ -943,6 +966,7 @@ export default function App() {
   const [exportBusy, setExportBusy] = useState(false)
   const [importMenuOpen, setImportMenuOpen] = useState(false)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
+  const [testImportsMenuOpen, setTestImportsMenuOpen] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [headerNotice, setHeaderNotice] = useState('')
   const [importStage, setImportStage] = useState<ImportStage>('toc_seed')
@@ -1912,6 +1936,10 @@ export default function App() {
     setExportMenuOpen(false)
   }
 
+  function toggleTestImportsMenu() {
+    setTestImportsMenuOpen((open) => !open)
+  }
+
   function handlePreviewClick(event: MouseEvent, featureName: string) {
     event.preventDefault()
     setHeaderNotice(`${featureName} is visible in preview style and not usable yet.`)
@@ -2538,22 +2566,53 @@ export default function App() {
                   {template.label}
                 </button>
               ))}
-              {IMPORT_TEST_TEMPLATES.map((template) => (
+              <div className="menu-wrap">
                 <button
-                  key={template.id}
                   type="button"
-                  className={`sti-pill ${template.id === 'gold-toc-seed' ? 'qa' : ''}`}
-                  onClick={() => handleApplyImportTestTemplate(template)}
+                  className="sti-pill qa"
+                  onClick={toggleTestImportsMenu}
                   disabled={!selectedVersion}
-                  title={
-                    template.id === 'gold-toc-seed'
-                      ? 'Seed Step 1 clusters from full gold TOC'
-                      : 'Load extracted chapter text for import testing'
-                  }
+                  aria-expanded={testImportsMenuOpen}
+                  title="Open grouped TOC/raw/gold import templates"
                 >
-                  {template.label}
+                  Test Imports
                 </button>
-              ))}
+                {testImportsMenuOpen && (
+                  <div className="menu-pop menu-pop-test-imports" onMouseLeave={() => setTestImportsMenuOpen(false)}>
+                    <div className="menu-head">Import test templates</div>
+                    {IMPORT_TEST_TEMPLATE_GROUPS.map((group) => (
+                      <div key={group.id} className="test-import-group">
+                        <div className="test-import-group-label">{group.label}</div>
+                        <div className="test-import-group-options">
+                          {group.templateIds.map((templateId) => {
+                            const template = IMPORT_TEST_TEMPLATES.find((candidate) => candidate.id === templateId)
+                            if (!template) return null
+                            return (
+                              <button
+                                key={template.id}
+                                type="button"
+                                className={`menu-item ${template.id === 'gold-toc-seed' ? 'qa' : ''}`}
+                                onClick={() => {
+                                  handleApplyImportTestTemplate(template)
+                                  setTestImportsMenuOpen(false)
+                                }}
+                                disabled={!selectedVersion}
+                                title={
+                                  template.id === 'gold-toc-seed'
+                                    ? 'Seed Step 1 clusters from full gold TOC'
+                                    : 'Load extracted chapter text for import testing'
+                                }
+                              >
+                                {template.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
                 className="sti-pill clear"

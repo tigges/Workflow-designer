@@ -88,6 +88,7 @@ export type FlowNode = {
     aht?: string
     volume?: string
     notes?: string
+    layoutGroup?: 'process' | 'fact' | 'policy' | 'unclassified'
     stage?: string
     touchpoint?: string
     emotion?: number
