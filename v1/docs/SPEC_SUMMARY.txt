@@ -1,0 +1,55 @@
+IMPORT WIZARD - SPEC SUMMARY
+Generated: 2026-04-05
+
+Bookmark
+- Branch bookmark: bookmark/IMPORT-WIZARD
+- Bookmark commit: 0e2e663
+
+Overview
+This export package captures the current import-focused application architecture and behavior,
+split into targeted specifications for implementation, review, and handoff.
+
+Included spec set
+1) APP_SPEC_OVERVIEW.md
+   Full application specification as currently implemented: shell, store, import flows,
+   canvas behavior, map views, inspector, export/import controls, and integration points.
+
+2) IMPORT_INTELLIGENCE_WIZARD_SPEC.md
+   Import intelligence and wizard workflow only:
+   - TOC seed -> detail ingest -> review -> confirm lifecycle
+   - Text/document/AI assist routing
+   - OCR cleanup and external AI assist pathway
+   - semantic import graph construction and decision branch semantics
+
+3) LAYOUT_INTELLIGENCE_SPEC.md
+   Layout intelligence only:
+   - config-driven layout rules
+   - process/annotation lane placement
+   - edge handle routing
+   - deterministic non-overlap enforcement
+   - strict separation from semantic content allocation
+
+4) TEST_IMPORT_CONTENT_TEMPLATES_SPEC.md
+   Test import content and templates only:
+   - quick templates and grouped "Test Imports" menu
+   - TOC/raw/gold template sets
+   - intended usage and expected output behavior
+
+5) IMPORT_MAP_SPEC.md
+   Import Map only:
+   - map clusters and map phases behavior
+   - seeded/empty cluster visibility and ordering
+   - import-map-specific controls
+   - Content Map + Imported Map review panels
+
+6) SPEC_EXPORT_MANIFEST.json
+   Machine-readable manifest for spec export consumers.
+
+Additional model artifacts included in bundle
+- IMPORT_MODEL_SPEC.md
+- import-model.schema.json
+- import-model.example.json
+
+Notes
+- Each main spec contains a brief description and a Mermaid visualization overview.
+- This package is prepared for direct export and external sharing/review.
