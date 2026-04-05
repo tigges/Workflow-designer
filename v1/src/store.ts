@@ -227,11 +227,17 @@ type ParsedImportStep = {
   kind: Exclude<ImportLineKind, 'heading' | 'skip'>
   title: string
   notes: string
+  actorHint: Actor
 }
 
 type ParsedImportSection = {
   title: string
   steps: ParsedImportStep[]
+}
+
+type SectionActorProfile = {
+  dominantActor: Actor
+  scoreByActor: Partial<Record<Actor, number>>
 }
 
 type ImportBudgets = {
@@ -276,6 +282,21 @@ const POLICY_RE =
   /\b(?:policy|must|should|required|requirement|cannot|never|within|business day|sla|rule|mandatory)\b/i
 const FACT_RE =
   /^(?:fact:|context:|background:|definition:|note:|statement:)|\b(?:means|defined as|refers to|currently|baseline|kpi)\b/i
+const VERB_PREFIX_RE =
+  /^(?:start|end|capture|check|verify|validate|review|process|handle|guide|inform|notify|escalate|cancel|resolve|create|update|open|close|submit|set|ask|confirm)\b[:\s-]*/i
+const CLUSTER_DOMAIN_ALIAS: Record<string, string> = {
+  withdrawals: 'Withdrawal',
+  withdrawal: 'Withdrawal',
+  cashier: 'Withdrawal',
+  payment: 'Payment',
+  payments: 'Payment',
+  deposit: 'Deposit',
+  deposits: 'Deposit',
+  verification: 'Verification',
+  risk: 'Risk',
+  support: 'Support',
+  account: 'Account',
+}
 
 function normalizeLine(line: string): string {
   return line.replace(/\s+/g, ' ').trim()
@@ -290,6 +311,188 @@ function clampText(value: string, maxChars: number): string {
 
 function stripLineMarkers(line: string): string {
   return line.replace(BULLET_RE, '').replace(NUMBERING_RE, '').trim()
+}
+
+function titleCase(value: string): string {
+  const lower = value.toLowerCase()
+  return lower
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function tokenize(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3)
+}
+
+function normalizeDedupKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function jaccard(a: string[], b: string[]): number {
+  if (a.length === 0 || b.length === 0) return 0
+  const aSet = new Set(a)
+  const bSet = new Set(b)
+  let intersect = 0
+  for (const token of aSet) {
+    if (bSet.has(token)) intersect += 1
+  }
+  const union = new Set([...aSet, ...bSet]).size
+  return union === 0 ? 0 : intersect / union
+}
+
+function compressProcessTitle(raw: string, budgets: ImportBudgets): string {
+  const cleaned = normalizeLine(stripLineMarkers(raw))
+    .replace(/^\[(process|decision|fact|policy|unclassified)\]\s*/i, '')
+    .replace(VERB_PREFIX_RE, '')
+    .replace(/^player\b/i, '')
+    .replace(/^agent\b/i, '')
+    .replace(/^system\b/i, '')
+    .trim()
+  if (!cleaned) return 'Imported step'
+  const compact = cleaned
+    .replace(/\b(?:for|to|with|by|from)\b.+$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return clampText(titleCase(compact || cleaned), budgets.maxTitleChars)
+}
+
+function splitFactPolicySentence(text: string): string[] {
+  const normalized = normalizeLine(text)
+  if (!normalized) return []
+  const parts = normalized
+    .split(/(?<=[.!?;])\s+(?=[A-Z0-9])/)
+    .map((part) => normalizeLine(part))
+    .filter((part) => part.length >= 8)
+  return parts.length > 0 ? parts : [normalized]
+}
+
+function classifyFactPolicySentence(sentence: string): ParsedImportStep['kind'] {
+  const lower = sentence.toLowerCase()
+  const policySignals = [
+    /\bmust\b/,
+    /\brequired\b/,
+    /\bshould\b/,
+    /\bwithin\b/,
+    /\bsla\b/,
+    /\bmandatory\b/,
+    /\bcannot\b/,
+    /\bnever\b/,
+    /\bbusiness day\b/,
+    /\brule\b/,
+  ]
+  const factSignals = [
+    /\bmeans\b/,
+    /\bdefined as\b/,
+    /\brefers to\b/,
+    /\bcurrently\b/,
+    /\bbaseline\b/,
+    /\bkpi\b/,
+    /\bcontext\b/,
+    /\bfact\b/,
+  ]
+  const policyScore = policySignals.reduce((score, signal) => (signal.test(lower) ? score + 1 : score), 0)
+  const factScore = factSignals.reduce((score, signal) => (signal.test(lower) ? score + 1 : score), 0)
+  return policyScore >= Math.max(1, factScore) ? 'policy' : 'fact'
+}
+
+function inferActorForStep(stepTitle: string, sectionActor: Actor): Actor {
+  const direct = actorFromText(stepTitle)
+  if (direct) return direct
+  return sectionActor
+}
+
+function getSectionDomainHint(sectionTitle: string): string {
+  const cleaned = sectionTitle
+    .replace(/^[#\d.\s]+/, '')
+    .replace(/\b(?:section|chapter|part)\b/gi, '')
+    .trim()
+  return cleaned
+}
+
+function summarizeClusterDomain(clusters: string[]): string {
+  const tokens = clusters.flatMap((cluster) => tokenize(cluster))
+  const counts = new Map<string, number>()
+  tokens.forEach((token) => {
+    const key = CLUSTER_DOMAIN_ALIAS[token] ?? token
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  })
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1])
+  if (ranked.length === 0) return ''
+  return titleCase(ranked[0][0])
+}
+
+function buildSectionActorProfile(sections: ParsedImportSection[]): Map<string, SectionActorProfile> {
+  const profile = new Map<string, SectionActorProfile>()
+  sections.forEach((section) => {
+    const scoreByActor: Partial<Record<Actor, number>> = {}
+    section.steps.forEach((step) => {
+      const actor = actorFromText(`${step.title} ${step.notes}`)
+      if (!actor) return
+      scoreByActor[actor] = (scoreByActor[actor] ?? 0) + 1
+    })
+    const ranked = (Object.entries(scoreByActor) as Array<[Actor, number]>).sort((a, b) => b[1] - a[1])
+    profile.set(section.title, {
+      dominantActor: ranked[0]?.[0] ?? '',
+      scoreByActor,
+    })
+  })
+  return profile
+}
+
+function rewriteTitleByCluster(title: string, clusters: string[], budgets: ImportBudgets): string {
+  const domain = summarizeClusterDomain(clusters)
+  const cleaned = title.replace(/^capture\s+[0-9.]+\s*/i, '').replace(/^section:\s*/i, '').trim()
+  if (!domain) return clampText(cleaned || title, budgets.maxTitleChars)
+  if (/^capture\b/i.test(title) || /^[0-9.]+\s*/.test(title)) {
+    return clampText(`${domain}: ${compressProcessTitle(cleaned || title, budgets)}`, budgets.maxTitleChars)
+  }
+  return clampText(cleaned || title, budgets.maxTitleChars)
+}
+
+function pruneNearDuplicateSteps(section: ParsedImportSection): ParsedImportSection {
+  const seenKeys = new Set<string>()
+  const kept: ParsedImportStep[] = []
+  for (const step of section.steps) {
+    const key = normalizeDedupKey(step.title)
+    if (!key) continue
+    if (seenKeys.has(key)) continue
+    const isNearDup = kept.some((existing) => {
+      const sim = jaccard(tokenize(existing.title), tokenize(step.title))
+      return sim >= 0.8
+    })
+    if (isNearDup) continue
+    seenKeys.add(key)
+    kept.push(step)
+  }
+  return { ...section, steps: kept }
+}
+
+function normalizeSectionSteps(
+  section: ParsedImportSection,
+  budgets: ImportBudgets,
+  clusterDomainHint: string,
+): ParsedImportSection {
+  const sectionDomain = getSectionDomainHint(section.title)
+  const baseDomain = sectionDomain || clusterDomainHint
+  const normalizedSteps = section.steps.map((step) => {
+    const candidateTitle = step.kind === 'process' ? compressProcessTitle(step.title, budgets) : step.title
+    const titleWithDomain =
+      baseDomain && !new RegExp(`\\b${baseDomain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(candidateTitle)
+        ? `${baseDomain}: ${candidateTitle}`
+        : candidateTitle
+    return {
+      ...step,
+      title: clampText(titleWithDomain, budgets.maxTitleChars),
+      notes: clampText(step.notes, budgets.maxNotesChars),
+    }
+  })
+  return pruneNearDuplicateSteps({ ...section, steps: normalizedSteps })
 }
 
 function splitTitleAndNotes(line: string, budgets: ImportBudgets): { title: string; notes: string } {
@@ -362,15 +565,43 @@ function parseSectionsFromText(text: string, budgets: ImportBudgets): {
       warnings.push(`Section "${activeSection.title}" clipped to ${budgets.maxChildrenPerSection} steps.`)
       continue
     }
+    if (classified.kind === 'fact' || classified.kind === 'policy') {
+      const splitSentences = splitFactPolicySentence(classified.text)
+      for (const sentence of splitSentences) {
+        if (activeSection.steps.length >= budgets.maxChildrenPerSection) break
+        const kind = classifyFactPolicySentence(sentence)
+        const title = kind === 'policy' ? clampText(sentence, budgets.maxTitleChars) : compressProcessTitle(sentence, budgets)
+        const notes = kind === 'policy' ? '' : clampText(sentence, budgets.maxNotesChars)
+        activeSection.steps.push({
+          kind,
+          title,
+          notes,
+          actorHint: inferActorForStep(sentence, ''),
+        })
+      }
+      continue
+    }
     const { title, notes } = splitTitleAndNotes(classified.text, budgets)
+    const normalizedTitle =
+      classified.kind === 'process' ? compressProcessTitle(title, budgets) : clampText(title, budgets.maxTitleChars)
     activeSection.steps.push({
       kind: classified.kind,
-      title,
+      title: normalizedTitle,
       notes,
+      actorHint: inferActorForStep(`${normalizedTitle} ${notes}`, ''),
     })
   }
 
-  const filtered = sections.filter((section) => section.steps.length > 0)
+  const clusterDomainHint = summarizeClusterDomain(
+    text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => /^cluster\s*:/i.test(line))
+      .map((line) => line.replace(/^cluster\s*:\s*/i, '').trim()),
+  )
+  const filtered = sections
+    .filter((section) => section.steps.length > 0)
+    .map((section) => normalizeSectionSteps(section, budgets, clusterDomainHint))
   return { sections: filtered.length > 0 ? filtered : [{ title: 'General', steps: [] }], warnings }
 }
 
@@ -425,11 +656,13 @@ function buildModelFromSections(
     confidence: ConfidenceSummary
     budgets: ImportBudgets
     warnings: string[]
+    clusters?: string[]
   },
 ): CanonicalModel {
-  const { origin, title, confidence, budgets, warnings } = options
+  const { origin, title, confidence, budgets, warnings, clusters = [] } = options
   const model = emptyModel(title)
   model.confidence = confidence
+  const sectionActorProfiles = buildSectionActorProfile(sections)
   const processNodes: FlowNode[] = []
   const annotationNodes: FlowNode[] = []
 
@@ -444,7 +677,7 @@ function buildModelFromSections(
       processNodes.push({
         id: mkId('n'),
         type: 'process',
-        label: clampText(`Section: ${sectionTitle}`, budgets.maxTitleChars),
+        label: rewriteTitleByCluster(`Section: ${sectionTitle}`, clusters, budgets),
         actor: '',
         status: 'live',
         metadata: {
@@ -465,11 +698,12 @@ function buildModelFromSections(
           return
         }
         const nodeType = step.kind === 'decision' ? 'decision' : inferNodeTypeFromText(step.title)
+        const sectionActor = sectionActorProfiles.get(section.title)?.dominantActor ?? ''
         processNodes.push({
           id: mkId('n'),
           type: nodeType,
-          label: clampText(step.title, budgets.maxTitleChars),
-          actor: actorFromText(step.title),
+          label: rewriteTitleByCluster(step.title, clusters, budgets),
+          actor: inferActorForStep(`${step.title} ${step.notes}`, sectionActor || step.actorHint),
           status: 'live',
           metadata: {
             stage: sectionTitle || mapStage(processNodes.length, Math.max(2, processCandidates.length)),
@@ -491,7 +725,7 @@ function buildModelFromSections(
       annotationNodes.push({
         id: mkId('n'),
         type: 'annotation',
-        label: clampText(`${prefix}: ${step.title}`, budgets.maxTitleChars),
+        label: clampText(`${prefix}: ${rewriteTitleByCluster(step.title, clusters, budgets)}`, budgets.maxTitleChars),
         actor: '',
         status: 'live',
         metadata: {
@@ -890,7 +1124,7 @@ function assignStagesFromSeedClusters(model: CanonicalModel, clusters: string[])
   return mapped
 }
 
-function importModelFromText(text: string): CanonicalModel {
+function importModelFromText(text: string, clusters: string[] = []): CanonicalModel {
   const { sections, warnings } = parseSectionsFromText(text, IMPORT_BUDGETS)
   return buildModelFromSections(sections, {
     origin: 'text_import',
@@ -898,11 +1132,12 @@ function importModelFromText(text: string): CanonicalModel {
     confidence: { overall: 0.72, extraction: 0.74, synthesis: 0.75, validationPenalty: 0 },
     budgets: IMPORT_BUDGETS,
     warnings,
+    clusters,
   })
 }
 
-function importModelFromDoc(text: string): CanonicalModel {
-  const base = importModelFromText(text)
+function importModelFromDoc(text: string, clusters: string[] = []): CanonicalModel {
+  const base = importModelFromText(text, clusters)
   base.title = 'Document Imported Flow'
   base.nodes = base.nodes.map((node) => ({
     ...node,
